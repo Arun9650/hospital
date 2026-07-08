@@ -35,7 +35,7 @@ export default function ConsultationScreen() {
   }
 
   return (
-    <div className="flex h-screen flex-col bg-black text-white">
+    <div className="flex min-h-dvh flex-col bg-black text-white lg:h-dvh">
       {/* Top bar */}
       <header className="flex items-center justify-between border-b border-white/10 px-4 py-3 sm:px-6">
         <Logo dark />
@@ -88,7 +88,7 @@ export default function ConsultationScreen() {
         </div>
 
         {/* Chat — its own separate panel next to the video */}
-        <aside className="flex min-h-0 w-full flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#0d0d0f] lg:w-96">
+        <aside className="flex min-h-[44dvh] w-full flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#0d0d0f] lg:min-h-0 lg:w-96">
           <div className="flex border-b border-white/10">
             {(["chat", "notes"] as const).map((t) => (
               <button

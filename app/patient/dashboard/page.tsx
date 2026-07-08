@@ -41,7 +41,7 @@ export default async function PatientDashboard() {
         title="Good afternoon, Alex"
         subtitle="Here's a calm overview of your health today."
         action={
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <Button href="/patient/messages">💬 Message a doctor</Button>
             <Button href="/patient/doctors" variant="light">Book appointment</Button>
           </div>

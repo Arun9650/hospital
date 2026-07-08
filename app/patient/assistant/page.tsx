@@ -63,7 +63,7 @@ export default function AssistantPage() {
 
   return (
     <PatientShell>
-      <div className="mx-auto flex h-[calc(100vh-9rem)] max-w-3xl flex-col">
+      <div className="mx-auto flex h-[calc(100dvh-8rem)] max-w-3xl flex-col sm:h-[calc(100dvh-9rem)]">
         <div className="mb-4 flex items-center gap-3">
           <span className="flex h-11 w-11 items-center justify-center rounded-full bg-[#eaf3fc] text-xl">✨</span>
           <div>

@@ -13,7 +13,7 @@ export default async function DoctorMessages() {
 
   return (
     <DoctorShell>
-      <div className="flex h-[calc(100vh-8rem)] flex-col">
+      <div className="flex h-[calc(100dvh-7rem)] flex-col sm:h-[calc(100dvh-8rem)]">
         <ChatClient
           threads={threads}
           perspective="doctor"

@@ -37,7 +37,7 @@ export default function DoctorConsultation() {
 
   if (completed) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-surface-soft p-6">
+      <div className="flex min-h-dvh items-center justify-center bg-surface-soft p-6">
         <div className="w-full max-w-lg rounded-2xl bg-white p-10 text-center">
           <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-[#e5f5ee] text-3xl">✓</div>
           <h1 className="mt-5 font-display text-3xl font-light">Consultation complete</h1>
@@ -54,7 +54,7 @@ export default function DoctorConsultation() {
   }
 
   return (
-    <div className="flex min-h-screen flex-col bg-black text-white lg:h-screen">
+    <div className="flex min-h-dvh flex-col bg-black text-white lg:h-dvh">
       <header className="flex items-center justify-between border-b border-white/10 px-4 py-3 sm:px-6">
         <Logo dark />
         <div className="flex items-center gap-2 rounded-full bg-white/10 px-3 py-1.5 text-sm">
@@ -66,7 +66,7 @@ export default function DoctorConsultation() {
       <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
         {/* Video */}
         <div className="flex flex-col p-4 lg:w-1/2">
-          <div className="relative flex flex-1 items-center justify-center overflow-hidden rounded-2xl bg-gradient-to-br from-[#0a2540] to-[#04101f]">
+          <div className="relative flex min-h-[280px] flex-1 items-center justify-center overflow-hidden rounded-2xl bg-gradient-to-br from-[#0a2540] to-[#04101f]">
             <div className="text-center">
               <Avatar initials="RM" color="#7a4bd1" size={100} />
               <p className="mt-4 font-display text-xl font-light">Rohan Mehta</p>
@@ -91,7 +91,7 @@ export default function DoctorConsultation() {
         </div>
 
         {/* Clinical workspace */}
-        <aside className="flex min-h-0 flex-1 flex-col border-t border-white/10 bg-white text-black lg:border-l lg:border-t-0">
+        <aside className="flex min-h-[50dvh] flex-1 flex-col border-t border-white/10 bg-white text-black lg:min-h-0 lg:border-l lg:border-t-0">
           <div className="flex border-b border-[#eee]">
             {tabs.map((t) => (
               <button
