@@ -1,8 +1,8 @@
 /* Aria Health service worker — offline support + runtime caching.
    Bump CACHE when precached assets change to force an update. */
-const CACHE = "aria-health-v1";
+const CACHE = "aria-health-v2";
 const OFFLINE_URL = "/offline.html";
-const PRECACHE = [OFFLINE_URL, "/icons/icon.svg", "/manifest.webmanifest"];
+const PRECACHE = [OFFLINE_URL, "/icons/icon-192.png", "/manifest.webmanifest"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
