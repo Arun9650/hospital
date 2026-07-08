@@ -48,10 +48,10 @@ export default function ConsultationScreen() {
         </Link>
       </header>
 
-      <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
+      <div className="flex min-h-0 flex-1 flex-col gap-4 p-4 lg:flex-row">
         {/* Video stage */}
-        <div className="relative flex-1 p-4">
-          <div className="relative flex h-full min-h-[320px] items-center justify-center overflow-hidden rounded-2xl bg-gradient-to-br from-[#0a2540] to-[#04101f]">
+        <div className="flex min-h-0 flex-1 flex-col">
+          <div className="relative flex min-h-[320px] flex-1 items-center justify-center overflow-hidden rounded-2xl bg-gradient-to-br from-[#0a2540] to-[#04101f]">
             <div className="text-center">
               <Avatar initials="AR" color="#0070d1" size={110} />
               <p className="mt-4 font-display text-2xl font-light">Dr. Anaya Rao</p>
@@ -87,8 +87,8 @@ export default function ConsultationScreen() {
           </div>
         </div>
 
-        {/* Side panel */}
-        <aside className="flex w-full flex-col border-t border-white/10 bg-[#0d0d0f] lg:w-96 lg:border-l lg:border-t-0">
+        {/* Chat — its own separate panel next to the video */}
+        <aside className="flex min-h-0 w-full flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#0d0d0f] lg:w-96">
           <div className="flex border-b border-white/10">
             {(["chat", "notes"] as const).map((t) => (
               <button
@@ -109,7 +109,7 @@ export default function ConsultationScreen() {
                 {chat.map((c, i) => (
                   <div key={i} className={`flex ${c.from === "me" ? "justify-end" : "justify-start"}`}>
                     <div
-                      className={`max-w-[80%] rounded-2xl px-4 py-2 text-sm ${
+                      className={`max-w-[80%] break-words rounded-2xl px-4 py-2 text-sm ${
                         c.from === "me" ? "bg-ps text-white" : "bg-white/10 text-white/90"
                       }`}
                     >
