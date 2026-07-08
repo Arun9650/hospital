@@ -18,8 +18,14 @@ const modeInfo: Record<string, { icon: string; desc: string }> = {
 };
 
 export function BookingWizardClient({ doctor }: { doctor: Doctor }) {
+  // Chat first: surface the chat option ahead of other modes, and preselect it.
+  const orderedModes = [...doctor.modes].sort(
+    (a, b) => (a === "Chat" ? -1 : 0) - (b === "Chat" ? -1 : 0)
+  );
+  const defaultMode = doctor.modes.includes("Chat") ? "Chat" : doctor.modes[0] ?? "";
+
   const [step, setStep] = useState(0);
-  const [mode, setMode] = useState<string>("");
+  const [mode, setMode] = useState<string>(defaultMode);
   const [day, setDay] = useState(0);
   const [slot, setSlot] = useState<string>("");
   const [reason, setReason] = useState("");
@@ -86,7 +92,7 @@ export function BookingWizardClient({ doctor }: { doctor: Doctor }) {
             <div>
               <h2 className="font-display text-xl font-normal">How would you like to consult?</h2>
               <div className="mt-5 grid gap-3 sm:grid-cols-2">
-                {doctor.modes.map((m) => (
+                {orderedModes.map((m) => (
                   <button
                     key={m}
                     onClick={() => setMode(m)}
@@ -299,7 +305,11 @@ function Confirmation({
           </div>
 
           <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-center">
-            <Button href="/patient/consultation">Join consultation</Button>
+            {mode === "Chat" ? (
+              <Button href={`/patient/messages?doctor=${doctor.id}`}>Open chat</Button>
+            ) : (
+              <Button href="/patient/consultation">Join consultation</Button>
+            )}
             <Button href="/patient/appointments" variant="light">View appointments</Button>
           </div>
 

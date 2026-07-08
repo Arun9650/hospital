@@ -157,13 +157,19 @@ export default async function DoctorProfile({
               Next: {doctor.nextSlot}
             </div>
             <div className="mt-5 space-y-2">
-              <Button href={`/patient/book/${doctor.id}`} full>
+              <Button href={`/patient/messages?doctor=${doctor.id}`} full>
+                💬 Message doctor
+              </Button>
+              <Button href={`/patient/book/${doctor.id}`} variant="light" full>
                 Book appointment
               </Button>
-              <Button href="/patient/consultation" variant="light" full>
-                Instant consult
+              <Button href="/patient/consultation" variant="ghost" full>
+                Instant video consult
               </Button>
             </div>
+            <p className="mt-3 text-center text-xs text-mute">
+              Start with a chat — usually replied to within 10 min.
+            </p>
             <ul className="mt-5 space-y-2 text-sm text-mute">
               <li className="flex items-center gap-2">✅ Verified & licensed</li>
               <li className="flex items-center gap-2">🔒 Encrypted & private</li>

@@ -629,3 +629,149 @@ export const assistantSuggestions = [
   "Help me prepare for my cardiology visit",
   "Is my blood pressure reading normal?",
 ];
+
+/* ---- Doctor ↔ patient chat ------------------------------------------- */
+export type ChatMessage = {
+  id: string;
+  from: "patient" | "doctor";
+  text: string;
+  time: string; // short label, e.g. "9:02 AM"
+};
+
+export type ChatThread = {
+  id: string;
+  doctorId: string;
+  doctorName: string;
+  doctorInitials: string;
+  doctorColor: string;
+  specialty: string;
+  patientName: string;
+  patientInitials: string;
+  patientColor: string;
+  online: boolean;
+  lastActive: string; // e.g. "2m ago"
+  unread: number;
+  messages: ChatMessage[];
+};
+
+/* The signed-in patient (mirrors PatientShell). */
+export const currentPatient = { name: "Alex Morgan", initials: "AM", color: "#0070d1" };
+
+/* Patient inbox — Alex Morgan's conversations with several doctors. */
+export const patientChatThreads: ChatThread[] = [
+  {
+    id: "ct-anaya",
+    doctorId: "dr-anaya-rao",
+    doctorName: "Dr. Anaya Rao",
+    doctorInitials: "AR",
+    doctorColor: seedColors[0],
+    specialty: "Cardiology",
+    patientName: currentPatient.name,
+    patientInitials: currentPatient.initials,
+    patientColor: currentPatient.color,
+    online: true,
+    lastActive: "2m ago",
+    unread: 1,
+    messages: [
+      { id: "m1", from: "doctor", text: "Hi Alex — I've reviewed your last two BP logs. How have the evening readings been this week?", time: "9:01 AM" },
+      { id: "m2", from: "patient", text: "Mostly around 128/82, but one evening it was 138/88 after a stressful day.", time: "9:04 AM" },
+      { id: "m3", from: "doctor", text: "That's reassuring overall. Keep logging twice a day and stay on Amlodipine 5mg. Let's not change the dose yet.", time: "9:06 AM" },
+      { id: "m4", from: "doctor", text: "One occasional spike after stress is expected. Flag me if you cross 140/90 on three separate days.", time: "9:06 AM" },
+    ],
+  },
+  {
+    id: "ct-liam",
+    doctorId: "dr-liam-fischer",
+    doctorName: "Dr. Liam Fischer",
+    doctorInitials: "LF",
+    doctorColor: seedColors[1],
+    specialty: "Dermatology",
+    patientName: currentPatient.name,
+    patientInitials: currentPatient.initials,
+    patientColor: currentPatient.color,
+    online: false,
+    lastActive: "1h ago",
+    unread: 0,
+    messages: [
+      { id: "m1", from: "patient", text: "The rash on my forearm looks a little better after the hydrocortisone. Still slightly itchy at night.", time: "Yesterday" },
+      { id: "m2", from: "doctor", text: "Good progress. Keep applying a thin layer twice daily for the full 10 days, and a fragrance-free moisturiser on top.", time: "Yesterday" },
+      { id: "m3", from: "patient", text: "Will do, thank you!", time: "Yesterday" },
+    ],
+  },
+  {
+    id: "ct-david",
+    doctorId: "dr-david-chen",
+    doctorName: "Dr. David Chen",
+    doctorInitials: "DC",
+    doctorColor: seedColors[7],
+    specialty: "General Physician",
+    patientName: currentPatient.name,
+    patientInitials: currentPatient.initials,
+    patientColor: currentPatient.color,
+    online: true,
+    lastActive: "5m ago",
+    unread: 0,
+    messages: [
+      { id: "m1", from: "doctor", text: "Hi Alex, how's the cough — any better since we spoke?", time: "8:30 AM" },
+      { id: "m2", from: "patient", text: "A bit better, but still there in the mornings.", time: "8:41 AM" },
+    ],
+  },
+];
+
+/* Doctor inbox — Dr. Anaya Rao's conversations with patients. */
+export const doctorChatThreads: ChatThread[] = [
+  {
+    id: "dt-rohan",
+    doctorId: "dr-anaya-rao",
+    doctorName: "Dr. Anaya Rao",
+    doctorInitials: "AR",
+    doctorColor: seedColors[0],
+    specialty: "Cardiology",
+    patientName: "Rohan Mehta",
+    patientInitials: "RM",
+    patientColor: seedColors[2],
+    online: true,
+    lastActive: "just now",
+    unread: 2,
+    messages: [
+      { id: "m1", from: "patient", text: "Doctor, the chest tightness came back briefly this morning while climbing stairs.", time: "10:12 AM" },
+      { id: "m2", from: "patient", text: "It eased after a few minutes of rest. Should I be worried?", time: "10:12 AM" },
+    ],
+  },
+  {
+    id: "dt-grace",
+    doctorId: "dr-anaya-rao",
+    doctorName: "Dr. Anaya Rao",
+    doctorInitials: "AR",
+    doctorColor: seedColors[0],
+    specialty: "Cardiology",
+    patientName: "Grace Lin",
+    patientInitials: "GL",
+    patientColor: seedColors[6],
+    online: false,
+    lastActive: "20m ago",
+    unread: 0,
+    messages: [
+      { id: "m1", from: "patient", text: "The palpitations after exercise have settled since I cut back on coffee.", time: "9:15 AM" },
+      { id: "m2", from: "doctor", text: "That's great to hear, Grace. Let's keep the Holter monitor plan for next week just to confirm.", time: "9:20 AM" },
+    ],
+  },
+  {
+    id: "dt-ahmed",
+    doctorId: "dr-anaya-rao",
+    doctorName: "Dr. Anaya Rao",
+    doctorInitials: "AR",
+    doctorColor: seedColors[0],
+    specialty: "Cardiology",
+    patientName: "Ahmed Farah",
+    patientInitials: "AF",
+    patientColor: seedColors[3],
+    online: false,
+    lastActive: "Yesterday",
+    unread: 0,
+    messages: [
+      { id: "m1", from: "doctor", text: "Post-angioplasty recovery looks on track. Any bleeding or swelling at the wrist site?", time: "Yesterday" },
+      { id: "m2", from: "patient", text: "None at all. Feeling much stronger this week.", time: "Yesterday" },
+    ],
+  },
+];

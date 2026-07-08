@@ -1,0 +1,269 @@
+"use client";
+
+import { useMemo, useState } from "react";
+import { Avatar } from "@/components/ui";
+import { currentPatient, getDoctor } from "@/lib/data";
+import type { ChatMessage, ChatThread } from "@/lib/data";
+
+type Perspective = "patient" | "doctor";
+
+/* A canned doctor reply so the patient chat feels alive (demo only). */
+function doctorReply(text: string): string {
+  const t = text.toLowerCase();
+  if (t.includes("pain") || t.includes("chest") || t.includes("worse"))
+    return "Thanks for letting me know. If it becomes severe, spreads to your arm or jaw, or comes with breathlessness, treat it as an emergency. Otherwise let's review it — can you note when it happens and how long it lasts?";
+  if (t.includes("thank"))
+    return "You're very welcome. Message me here any time — I usually reply within a few minutes during clinic hours.";
+  if (t.includes("?"))
+    return "Good question. Based on what you've shared I'd suggest we keep monitoring for now. I'll add a note to your record and we can revisit at your next slot.";
+  return "Got it, thank you for the update. I've noted this in your record — keep me posted if anything changes and we'll adjust the plan together.";
+}
+
+function makeThreadForDoctor(doctorId: string): ChatThread | null {
+  const doc = getDoctor(doctorId);
+  if (!doc) return null;
+  return {
+    id: `new-${doctorId}`,
+    doctorId: doc.id,
+    doctorName: doc.name,
+    doctorInitials: doc.initials,
+    doctorColor: doc.photo,
+    specialty: doc.specialty,
+    patientName: currentPatient.name,
+    patientInitials: currentPatient.initials,
+    patientColor: currentPatient.color,
+    online: true,
+    lastActive: "now",
+    unread: 0,
+    messages: [
+      {
+        id: "greet",
+        from: "doctor",
+        text: `Hi ${currentPatient.name.split(" ")[0]}, thanks for reaching out. Tell me what's going on and I'll help — I usually reply within a few minutes.`,
+        time: "Now",
+      },
+    ],
+  };
+}
+
+export function ChatClient({
+  threads: seed,
+  perspective,
+  initialDoctorId,
+}: {
+  threads: ChatThread[];
+  perspective: Perspective;
+  initialDoctorId?: string;
+}) {
+  const [threads, setThreads] = useState<ChatThread[]>(() => {
+    if (
+      perspective === "patient" &&
+      initialDoctorId &&
+      !seed.some((t) => t.doctorId === initialDoctorId)
+    ) {
+      const fresh = makeThreadForDoctor(initialDoctorId);
+      if (fresh) return [fresh, ...seed];
+    }
+    return seed;
+  });
+
+  const firstId =
+    (initialDoctorId && threads.find((t) => t.doctorId === initialDoctorId)?.id) ||
+    threads[0]?.id ||
+    "";
+  const [activeId, setActiveId] = useState(firstId);
+  const [mobileThreadOpen, setMobileThreadOpen] = useState(false);
+  const [draft, setDraft] = useState("");
+
+  const ownSide: "patient" | "doctor" = perspective;
+
+  const active = useMemo(
+    () => threads.find((t) => t.id === activeId),
+    [threads, activeId]
+  );
+
+  function other(t: ChatThread) {
+    return perspective === "patient"
+      ? {
+          name: t.doctorName,
+          initials: t.doctorInitials,
+          color: t.doctorColor,
+          sub: t.specialty,
+        }
+      : {
+          name: t.patientName,
+          initials: t.patientInitials,
+          color: t.patientColor,
+          sub: "Patient",
+        };
+  }
+
+  function openThread(id: string) {
+    setActiveId(id);
+    setMobileThreadOpen(true);
+    setThreads((ts) => ts.map((t) => (t.id === id ? { ...t, unread: 0 } : t)));
+  }
+
+  function send(e: React.FormEvent) {
+    e.preventDefault();
+    const text = draft.trim();
+    if (!text || !active) return;
+    const now = new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+    const msg: ChatMessage = { id: `s-${Date.now()}`, from: ownSide, text, time: now };
+    setThreads((ts) =>
+      ts.map((t) =>
+        t.id === active.id
+          ? { ...t, messages: [...t.messages, msg], lastActive: "now" }
+          : t
+      )
+    );
+    setDraft("");
+
+    // Demo auto-reply from the doctor when the patient writes.
+    if (perspective === "patient") {
+      setTimeout(() => {
+        const reply: ChatMessage = {
+          id: `r-${Date.now()}`,
+          from: "doctor",
+          text: doctorReply(text),
+          time: new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }),
+        };
+        setThreads((ts) =>
+          ts.map((t) =>
+            t.id === active.id ? { ...t, messages: [...t.messages, reply] } : t
+          )
+        );
+      }, 900);
+    }
+  }
+
+  return (
+    <div className="card-flat flex min-h-0 flex-1 overflow-hidden">
+      {/* Thread list */}
+      <div
+        className={`${mobileThreadOpen ? "hidden" : "flex"} w-full flex-col border-r border-[#f0f0f0] lg:flex lg:w-80`}
+      >
+        <div className="border-b border-[#f0f0f0] p-4">
+          <h2 className="font-display text-lg font-normal tracking-tight">Messages</h2>
+          <p className="text-xs text-mute">
+            {perspective === "patient" ? "Chat with your doctors" : "Chat with your patients"}
+          </p>
+        </div>
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          {threads.map((t) => {
+            const o = other(t);
+            const last = t.messages[t.messages.length - 1];
+            const isActive = t.id === activeId;
+            return (
+              <button
+                key={t.id}
+                onClick={() => openThread(t.id)}
+                className={`flex w-full items-center gap-3 border-b border-[#f6f6f6] px-4 py-3 text-left transition-colors ${
+                  isActive ? "bg-[#eaf3fc]" : "hover:bg-surface-soft"
+                }`}
+              >
+                <div className="relative shrink-0">
+                  <Avatar initials={o.initials} color={o.color} size={44} />
+                  {t.online && (
+                    <span className="absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 border-white bg-success" />
+                  )}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="truncate text-sm font-medium">{o.name}</p>
+                    <span className="shrink-0 text-[11px] text-mute">{t.lastActive}</span>
+                  </div>
+                  <p className="truncate text-xs text-mute">
+                    {last ? `${last.from === ownSide ? "You: " : ""}${last.text}` : o.sub}
+                  </p>
+                </div>
+                {t.unread > 0 && (
+                  <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-ps px-1.5 text-[11px] font-semibold text-white">
+                    {t.unread}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Conversation */}
+      {active ? (
+        <div
+          className={`${mobileThreadOpen ? "flex" : "hidden"} min-w-0 flex-1 flex-col lg:flex`}
+        >
+          {/* Header */}
+          <div className="flex items-center gap-3 border-b border-[#f0f0f0] p-4">
+            <button
+              onClick={() => setMobileThreadOpen(false)}
+              className="flex h-9 w-9 items-center justify-center rounded-full hover:bg-surface-soft lg:hidden"
+              aria-label="Back to conversations"
+            >
+              ←
+            </button>
+            <Avatar initials={other(active).initials} color={other(active).color} size={40} />
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-medium">{other(active).name}</p>
+              <p className="text-xs text-mute">
+                {active.online ? (
+                  <span className="text-success">● Online</span>
+                ) : (
+                  `Active ${active.lastActive}`
+                )}{" "}
+                · {other(active).sub}
+              </p>
+            </div>
+          </div>
+
+          {/* Messages */}
+          <div className="min-h-0 flex-1 space-y-3 overflow-y-auto bg-surface-soft p-4">
+            {active.messages.map((m) => {
+              const mine = m.from === ownSide;
+              return (
+                <div key={m.id} className={`flex ${mine ? "justify-end" : "justify-start"}`}>
+                  <div className={`max-w-[78%] ${mine ? "items-end" : "items-start"}`}>
+                    <div
+                      className={`rounded-2xl px-4 py-2.5 text-sm ${
+                        mine
+                          ? "rounded-br-md bg-ps text-white"
+                          : "rounded-bl-md bg-white text-charcoal shadow-sm"
+                      }`}
+                    >
+                      {m.text}
+                    </div>
+                    <p className={`mt-1 text-[11px] text-mute ${mine ? "text-right" : ""}`}>
+                      {m.time}
+                    </p>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Composer */}
+          <form onSubmit={send} className="flex items-center gap-2 border-t border-[#f0f0f0] p-3">
+            <input
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              placeholder={`Message ${other(active).name.split(" ").slice(0, 2).join(" ")}…`}
+              className="min-w-0 flex-1 rounded-full bg-surface-card px-4 py-3 text-sm outline-none placeholder:text-mute"
+            />
+            <button
+              type="submit"
+              disabled={!draft.trim()}
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-ps text-white disabled:opacity-40"
+              aria-label="Send message"
+            >
+              ➤
+            </button>
+          </form>
+        </div>
+      ) : (
+        <div className="hidden flex-1 items-center justify-center text-sm text-mute lg:flex">
+          Select a conversation to start chatting.
+        </div>
+      )}
+    </div>
+  );
+}

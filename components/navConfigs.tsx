@@ -24,11 +24,13 @@ const icons = {
   chart: "M4 20V10M10 20V4M16 20v-7M22 20H2",
   stethoscope: "M6 3v6a5 5 0 0010 0V3M4 3h4M16 3h4M19 14a3 3 0 100 6 3 3 0 000-6zM11 14v3a5 5 0 005 5",
   content: "M4 5h16M4 12h16M4 19h10",
+  chat: "M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z",
 };
 
 export const patientNav: NavItem[] = [
   { href: "/patient/dashboard", label: "Dashboard", icon: <I d={icons.grid} /> },
   { href: "/patient/doctors", label: "Find Doctors", icon: <I d={icons.search} /> },
+  { href: "/patient/messages", label: "Messages", icon: <I d={icons.chat} /> },
   { href: "/patient/appointments", label: "Appointments", icon: <I d={icons.calendar} /> },
   { href: "/patient/records", label: "Medical Records", icon: <I d={icons.file} /> },
   { href: "/patient/prescriptions", label: "Prescriptions", icon: <I d={icons.rx} /> },
@@ -39,6 +41,7 @@ export const patientNav: NavItem[] = [
 export const doctorNav: NavItem[] = [
   { href: "/doctor/dashboard", label: "Dashboard", icon: <I d={icons.grid} /> },
   { href: "/doctor/appointments", label: "Requests", icon: <I d={icons.calendar} /> },
+  { href: "/doctor/messages", label: "Messages", icon: <I d={icons.chat} /> },
   { href: "/doctor/consultation", label: "Consultation", icon: <I d={icons.stethoscope} /> },
   { href: "/doctor/patients", label: "Patient Records", icon: <I d={icons.users} /> },
   { href: "/doctor/prescriptions", label: "Prescriptions", icon: <I d={icons.rx} /> },

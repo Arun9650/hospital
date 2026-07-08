@@ -13,8 +13,8 @@ import {
 import { getUserId } from "@/lib/auth";
 
 const quickActions = [
+  { icon: "💬", label: "Message a doctor", href: "/patient/messages" },
   { icon: "🔍", label: "Find a doctor", href: "/patient/doctors" },
-  { icon: "🧪", label: "Book lab test", href: "/patient/records" },
   { icon: "💊", label: "Order medicines", href: "/patient/prescriptions" },
   { icon: "✨", label: "Ask AI assistant", href: "/patient/assistant" },
 ];
@@ -40,7 +40,12 @@ export default async function PatientDashboard() {
       <PageHeader
         title="Good afternoon, Alex"
         subtitle="Here's a calm overview of your health today."
-        action={<Button href="/patient/doctors">Book appointment</Button>}
+        action={
+          <div className="flex gap-2">
+            <Button href="/patient/messages">💬 Message a doctor</Button>
+            <Button href="/patient/doctors" variant="light">Book appointment</Button>
+          </div>
+        }
       />
 
       {/* Quick actions */}
