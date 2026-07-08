@@ -31,9 +31,15 @@ ignored) and flips from mock data to live Supabase.
 Open the **SQL Editor** in Supabase and run, in order:
 
 1. `supabase/migrations/0001_schema.sql` — tables, the sign-up trigger, and RLS.
-2. `supabase/seed.sql` — demo specialties, doctors, reviews, appointments, etc.
+2. `supabase/migrations/0002_chat.sql` — chat tables, RLS, and realtime publication.
+3. `supabase/seed.sql` — demo specialties, doctors, reviews, appointments, etc.
+4. `supabase/seed_chat.sql` — demo chat threads & messages.
 
-(Or, with the Supabase CLI: `supabase db push` then run the seed file.)
+(Or, with the Supabase CLI: `supabase db push` then run the two seed files.)
+
+> **Realtime:** `0002_chat.sql` adds `chat_messages` / `chat_threads` to the
+> `supabase_realtime` publication, so new messages stream to open chats with no
+> extra dashboard config. If you ever reset Realtime, re-run that migration.
 
 ## 4. Configure Auth
 
@@ -54,6 +60,9 @@ npm run dev
 - **Register** a patient at `/register` or a doctor at `/doctor/register`.
 - Booking an appointment (`/patient/book/[id]`) writes a real `appointments` row.
 - Doctors issue prescriptions (`/doctor/prescriptions`) that persist.
+- **Messages** (`/patient/messages`, `/doctor/messages`) persist to `chat_messages`
+  and stream live — open the patient and doctor inboxes side by side (two browsers
+  / an incognito window) and watch messages arrive in realtime.
 - Admin pages (`/admin/*`) read live across all users.
 
 ## How the fallback works

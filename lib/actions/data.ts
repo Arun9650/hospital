@@ -2,6 +2,7 @@
 
 import { createServerSupabase } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
+import { shortTime } from "@/lib/db";
 
 type Result = { ok: boolean };
 
@@ -36,6 +37,75 @@ export async function createAppointment(input: {
       reason: input.reason || "General consultation",
     });
     return { ok: true };
+  } catch {
+    return { ok: false };
+  }
+}
+
+/* Send a chat message. Returns the persisted row so the sender can render it
+   immediately (realtime dedupes the echo by id). */
+export async function sendChatMessage(input: {
+  threadId: string;
+  sender: "patient" | "doctor";
+  body: string;
+}): Promise<{ ok: boolean; id?: string; time?: string }> {
+  const body = input.body.trim();
+  if (!body) return { ok: false };
+  if (!isSupabaseConfigured) return { ok: true };
+  try {
+    const sb = await createServerSupabase();
+    const { data, error } = await sb
+      .from("chat_messages")
+      .insert({ thread_id: input.threadId, sender: input.sender, body })
+      .select("id, created_at")
+      .single();
+    if (error || !data) return { ok: false };
+    await sb
+      .from("chat_threads")
+      .update({ updated_at: new Date().toISOString() })
+      .eq("id", input.threadId);
+    return { ok: true, id: String(data.id), time: shortTime(data.created_at) };
+  } catch {
+    return { ok: false };
+  }
+}
+
+/* Find (or create) the patient's chat thread with a doctor, e.g. when the
+   patient taps "Message doctor". Returns the thread id. */
+export async function getOrCreatePatientThread(
+  doctorId: string
+): Promise<{ ok: boolean; threadId?: string }> {
+  if (!isSupabaseConfigured) return { ok: true };
+  try {
+    const sb = await createServerSupabase();
+    const {
+      data: { user },
+    } = await sb.auth.getUser();
+
+    let find = sb.from("chat_threads").select("id").eq("doctor_id", doctorId);
+    find = user
+      ? find.or(`patient_id.eq.${user.id},patient_name.eq.Alex Morgan`)
+      : find.eq("patient_name", "Alex Morgan");
+    const { data: existing } = await find.limit(1).maybeSingle();
+    if (existing) return { ok: true, threadId: String(existing.id) };
+
+    if (!user) return { ok: false }; // anon can't create (RLS: authenticated only)
+    const meta = user.user_metadata ?? {};
+    const { data, error } = await sb
+      .from("chat_threads")
+      .insert({
+        doctor_id: doctorId,
+        patient_id: user.id,
+        patient_name: (meta.full_name as string) || "You",
+        patient_initials:
+          (meta.initials as string) || (user.email ?? "AM").slice(0, 2).toUpperCase(),
+        patient_color: (meta.avatar_color as string) || "#0070d1",
+        online: true,
+      })
+      .select("id")
+      .single();
+    if (error || !data) return { ok: false };
+    return { ok: true, threadId: String(data.id) };
   } catch {
     return { ok: false };
   }

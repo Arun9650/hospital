@@ -1,12 +1,24 @@
 import { DoctorShell } from "@/components/roleShells";
 import { ChatClient } from "@/components/ChatClient";
-import { doctorChatThreads } from "@/lib/data";
+import { getChatThreads } from "@/lib/db";
+import { isSupabaseConfigured } from "@/lib/supabase/config";
 
-export default function DoctorMessages() {
+export const dynamic = "force-dynamic";
+
+// The doctor portal is demoed as Dr. Anaya Rao (mirrors DoctorShell).
+const DOCTOR_ID = "dr-anaya-rao";
+
+export default async function DoctorMessages() {
+  const threads = await getChatThreads("doctor", { doctorId: DOCTOR_ID });
+
   return (
     <DoctorShell>
       <div className="flex h-[calc(100vh-8rem)] flex-col">
-        <ChatClient threads={doctorChatThreads} perspective="doctor" />
+        <ChatClient
+          threads={threads}
+          perspective="doctor"
+          configured={isSupabaseConfigured}
+        />
       </div>
     </DoctorShell>
   );

@@ -1,11 +1,19 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Avatar } from "@/components/ui";
+import { createClient } from "@/lib/supabase/client";
+import { sendChatMessage } from "@/lib/actions/data";
 import { currentPatient, getDoctor } from "@/lib/data";
 import type { ChatMessage, ChatThread } from "@/lib/data";
 
 type Perspective = "patient" | "doctor";
+
+/* Short clock label for realtime payloads (mirrors lib/db.shortTime). */
+function clockLabel(ts?: string): string {
+  const d = ts ? new Date(ts) : new Date();
+  return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+}
 
 /* A canned doctor reply so the patient chat feels alive (demo only). */
 function doctorReply(text: string): string {
@@ -50,13 +58,18 @@ export function ChatClient({
   threads: seed,
   perspective,
   initialDoctorId,
+  configured = false,
 }: {
   threads: ChatThread[];
   perspective: Perspective;
   initialDoctorId?: string;
+  configured?: boolean;
 }) {
   const [threads, setThreads] = useState<ChatThread[]>(() => {
+    // Only synthesize a local thread in mock mode; when Supabase is configured
+    // the server has already created/loaded the thread for the doctor param.
     if (
+      !configured &&
       perspective === "patient" &&
       initialDoctorId &&
       !seed.some((t) => t.doctorId === initialDoctorId)
@@ -82,6 +95,56 @@ export function ChatClient({
     [threads, activeId]
   );
 
+  // Keep the latest activeId reachable inside the realtime callback without
+  // re-subscribing every time it changes.
+  const activeIdRef = useRef(activeId);
+  useEffect(() => {
+    activeIdRef.current = activeId;
+  }, [activeId]);
+
+  // Realtime: append inserted messages that belong to a thread we're showing.
+  useEffect(() => {
+    if (!configured) return;
+    const sb = createClient();
+    const channel = sb
+      .channel("chat_messages")
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "chat_messages" },
+        (payload) => {
+          const row = payload.new as {
+            id: string;
+            thread_id: string;
+            sender: "patient" | "doctor";
+            body: string;
+            created_at: string;
+          };
+          setThreads((ts) => {
+            if (!ts.some((t) => t.id === row.thread_id)) return ts;
+            return ts.map((t) => {
+              if (t.id !== row.thread_id) return t;
+              if (t.messages.some((m) => m.id === row.id)) return t; // dedupe echo
+              const isMine = row.sender === ownSide;
+              const isOpen = activeIdRef.current === t.id;
+              return {
+                ...t,
+                messages: [
+                  ...t.messages,
+                  { id: row.id, from: row.sender, text: row.body, time: clockLabel(row.created_at) },
+                ],
+                lastActive: "just now",
+                unread: isMine || isOpen ? t.unread : t.unread + 1,
+              };
+            });
+          });
+        }
+      )
+      .subscribe();
+    return () => {
+      sb.removeChannel(channel);
+    };
+  }, [configured, ownSide]);
+
   function other(t: ChatThread) {
     return perspective === "patient"
       ? {
@@ -104,35 +167,42 @@ export function ChatClient({
     setThreads((ts) => ts.map((t) => (t.id === id ? { ...t, unread: 0 } : t)));
   }
 
-  function send(e: React.FormEvent) {
-    e.preventDefault();
-    const text = draft.trim();
-    if (!text || !active) return;
-    const now = new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
-    const msg: ChatMessage = { id: `s-${Date.now()}`, from: ownSide, text, time: now };
+  function appendMessage(threadId: string, msg: ChatMessage) {
     setThreads((ts) =>
       ts.map((t) =>
-        t.id === active.id
-          ? { ...t, messages: [...t.messages, msg], lastActive: "now" }
+        t.id === threadId && !t.messages.some((m) => m.id === msg.id)
+          ? { ...t, messages: [...t.messages, msg], lastActive: "just now" }
           : t
       )
     );
+  }
+
+  async function send(e: React.FormEvent) {
+    e.preventDefault();
+    const text = draft.trim();
+    if (!text || !active) return;
+    const threadId = active.id;
     setDraft("");
 
-    // Demo auto-reply from the doctor when the patient writes.
+    if (configured) {
+      // Persist to Supabase; the realtime echo (deduped by id) confirms it.
+      const res = await sendChatMessage({ threadId, sender: ownSide, body: text });
+      if (res.ok && res.id) {
+        appendMessage(threadId, { id: res.id, from: ownSide, text, time: res.time || clockLabel() });
+      }
+      return;
+    }
+
+    // Mock mode: optimistic append + a canned doctor auto-reply.
+    appendMessage(threadId, { id: `s-${Date.now()}`, from: ownSide, text, time: clockLabel() });
     if (perspective === "patient") {
       setTimeout(() => {
-        const reply: ChatMessage = {
+        appendMessage(threadId, {
           id: `r-${Date.now()}`,
           from: "doctor",
           text: doctorReply(text),
-          time: new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }),
-        };
-        setThreads((ts) =>
-          ts.map((t) =>
-            t.id === active.id ? { ...t, messages: [...t.messages, reply] } : t
-          )
-        );
+          time: clockLabel(),
+        });
       }, 900);
     }
   }

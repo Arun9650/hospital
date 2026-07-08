@@ -17,7 +17,12 @@ import type {
   Prescription,
   MedicalRecord,
   NotificationItem,
+  ChatThread,
+  ChatMessage,
 } from "./data";
+
+/** Demo patient name used for seeded (NULL-patient) chat threads. */
+const DEMO_PATIENT_NAME = "Alex Morgan";
 
 /* ---- Row mappers (snake_case DB → camelCase types) -------------------- */
 
@@ -106,6 +111,59 @@ function mapNotification(r: Row): NotificationItem {
     time: String(r.time_label ?? ""),
     kind: (r.kind as NotificationItem["kind"]) ?? "system",
     unread: Boolean(r.unread),
+  };
+}
+
+/* Short clock label for a message timestamp, e.g. "9:02 AM". */
+export function shortTime(ts: unknown): string {
+  const d = new Date(String(ts ?? ""));
+  if (isNaN(d.getTime())) return "";
+  return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+}
+
+/* Relative "last active" label for a thread, e.g. "2m ago" / "Yesterday". */
+export function relativeTime(ts: unknown): string {
+  const d = new Date(String(ts ?? ""));
+  if (isNaN(d.getTime())) return "";
+  const secs = Math.round((Date.now() - d.getTime()) / 1000);
+  if (secs < 45) return "just now";
+  const mins = Math.round(secs / 60);
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.round(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.round(hours / 24);
+  if (days === 1) return "Yesterday";
+  if (days < 7) return `${days}d ago`;
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
+function mapChatThread(t: Row, msgs: Row[], perspective: "patient" | "doctor"): ChatThread {
+  const doc = (t.doctor as Row) ?? {};
+  const messages: ChatMessage[] = msgs.map((m) => ({
+    id: String(m.id),
+    from: (m.sender as "patient" | "doctor") ?? "doctor",
+    text: String(m.body ?? ""),
+    time: shortTime(m.created_at),
+  }));
+  // Unread = trailing run of messages from the other party.
+  const otherSide = perspective === "patient" ? "doctor" : "patient";
+  let unread = 0;
+  for (let i = messages.length - 1; i >= 0 && messages[i].from === otherSide; i--) unread++;
+  const lastTs = msgs.length ? msgs[msgs.length - 1].created_at : (t.updated_at ?? t.created_at);
+  return {
+    id: String(t.id),
+    doctorId: String(t.doctor_id ?? ""),
+    doctorName: String(doc.name ?? "Doctor"),
+    doctorInitials: String(doc.initials ?? "DR"),
+    doctorColor: String(doc.photo ?? "#0070d1"),
+    specialty: String(doc.specialty ?? ""),
+    patientName: String(t.patient_name ?? "Patient"),
+    patientInitials: String(t.patient_initials ?? "P"),
+    patientColor: String(t.patient_color ?? "#0070d1"),
+    online: Boolean(t.online),
+    lastActive: relativeTime(lastTs),
+    unread,
+    messages,
   };
 }
 
@@ -254,6 +312,54 @@ export async function getNotifications(userId?: string): Promise<NotificationIte
     return data.map(mapNotification);
   } catch {
     return mock.notifications;
+  }
+}
+
+/**
+ * Chat threads for one side of the conversation.
+ *  - "patient": the signed-in patient's own threads + seeded demo threads.
+ *  - "doctor":  every thread addressed to the given doctor id.
+ * Falls back to mock threads when Supabase is unconfigured or a query throws.
+ */
+export async function getChatThreads(
+  perspective: "patient" | "doctor",
+  opts: { userId?: string; doctorId?: string } = {}
+): Promise<ChatThread[]> {
+  const fallback =
+    perspective === "patient" ? mock.patientChatThreads : mock.doctorChatThreads;
+  if (!isSupabaseConfigured) return fallback;
+  try {
+    const sb = createPublicClient();
+    let q = sb
+      .from("chat_threads")
+      .select("*, doctor:doctors(name, initials, photo, specialty)");
+    if (perspective === "patient") {
+      q = opts.userId
+        ? q.or(`patient_id.eq.${opts.userId},patient_name.eq.${DEMO_PATIENT_NAME}`)
+        : q.eq("patient_name", DEMO_PATIENT_NAME);
+    } else if (opts.doctorId) {
+      q = q.eq("doctor_id", opts.doctorId);
+    }
+    const { data: threads, error } = await q.order("updated_at", { ascending: false });
+    if (error || !threads?.length) return fallback;
+
+    const ids = threads.map((t) => t.id);
+    const { data: msgs } = await sb
+      .from("chat_messages")
+      .select("*")
+      .in("thread_id", ids)
+      .order("created_at", { ascending: true });
+
+    const byThread = new Map<string, Row[]>();
+    for (const m of (msgs as Row[]) ?? []) {
+      const key = String(m.thread_id);
+      (byThread.get(key) ?? byThread.set(key, []).get(key)!).push(m);
+    }
+    return (threads as Row[]).map((t) =>
+      mapChatThread(t, byThread.get(String(t.id)) ?? [], perspective)
+    );
+  } catch {
+    return fallback;
   }
 }
 
