@@ -1,6 +1,7 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Roboto, Inter } from "next/font/google";
 import "./globals.css";
+import { ServiceWorkerRegister } from "@/components/ServiceWorkerRegister";
 
 const display = Roboto({
   variable: "--font-display",
@@ -15,9 +16,28 @@ const sans = Inter({
 });
 
 export const metadata: Metadata = {
+  applicationName: "Aria Health",
   title: "Aria Health — Healthcare that begins with one conversation",
   description:
     "Discover doctors, book appointments, consult online, manage records and receive digital prescriptions on Aria Health, a premium telemedicine platform.",
+  manifest: "/manifest.webmanifest",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "Aria Health",
+  },
+  icons: {
+    icon: [{ url: "/icons/icon.svg", type: "image/svg+xml" }],
+    apple: [{ url: "/icons/icon.svg" }],
+  },
+  formatDetection: { telephone: false },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#0070d1",
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
 };
 
 export default function RootLayout({
@@ -30,7 +50,10 @@ export default function RootLayout({
       lang="en"
       className={`${display.variable} ${sans.variable} h-full`}
     >
-      <body className="min-h-full">{children}</body>
+      <body className="min-h-full">
+        {children}
+        <ServiceWorkerRegister />
+      </body>
     </html>
   );
 }
