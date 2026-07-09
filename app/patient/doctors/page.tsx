@@ -13,7 +13,9 @@ export default async function DoctorsPage() {
         </PatientShell>
       }
     >
-      <DoctorSearchClient doctors={doctors} specialties={specialties} />
+      <PatientShell>
+        <DoctorSearchClient doctors={doctors} specialties={specialties} />
+      </PatientShell>
     </Suspense>
   );
 }

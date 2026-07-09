@@ -11,16 +11,26 @@ function initialsFrom(name: string, email: string) {
   return (email.slice(0, 2) || "AH").toUpperCase();
 }
 
+const HOME_BY_ROLE: Record<string, string> = {
+  patient: "/patient/dashboard",
+  doctor: "/doctor/dashboard",
+  admin: "/admin/dashboard",
+};
+
 export async function signIn(formData: FormData) {
   const email = String(formData.get("email") ?? "");
   const password = String(formData.get("password") ?? "");
+  const next = String(formData.get("next") ?? "");
 
   if (isSupabaseConfigured) {
     const sb = await createServerSupabase();
-    const { error } = await sb.auth.signInWithPassword({ email, password });
+    const { data, error } = await sb.auth.signInWithPassword({ email, password });
     if (error) redirect(`/login?error=${encodeURIComponent(error.message)}`);
+    if (next.startsWith("/")) redirect(next);
+    const role = (data.user?.user_metadata?.role as string) ?? "patient";
+    redirect(HOME_BY_ROLE[role] ?? "/patient/dashboard");
   }
-  redirect("/patient/dashboard");
+  redirect(next.startsWith("/") ? next : "/patient/dashboard");
 }
 
 export async function signUpPatient(formData: FormData) {
@@ -30,7 +40,7 @@ export async function signUpPatient(formData: FormData) {
 
   if (isSupabaseConfigured) {
     const sb = await createServerSupabase();
-    const { error } = await sb.auth.signUp({
+    const { data, error } = await sb.auth.signUp({
       email,
       password,
       options: {
@@ -43,6 +53,8 @@ export async function signUpPatient(formData: FormData) {
       },
     });
     if (error) redirect(`/register?error=${encodeURIComponent(error.message)}`);
+    // Email confirmation on → no session yet. Tell them to check their inbox.
+    if (!data.session) redirect(`/login?check_email=${encodeURIComponent(email)}`);
   }
   redirect("/patient/dashboard");
 }
@@ -54,7 +66,7 @@ export async function signUpDoctor(formData: FormData) {
 
   if (isSupabaseConfigured) {
     const sb = await createServerSupabase();
-    const { error } = await sb.auth.signUp({
+    const { data, error } = await sb.auth.signUp({
       email,
       password,
       options: {
@@ -67,6 +79,8 @@ export async function signUpDoctor(formData: FormData) {
       },
     });
     if (error) redirect(`/doctor/register?error=${encodeURIComponent(error.message)}`);
+    // Email confirmation on → no session yet. Tell them to check their inbox.
+    if (!data.session) redirect(`/login?check_email=${encodeURIComponent(email)}`);
   }
   redirect("/doctor/dashboard");
 }

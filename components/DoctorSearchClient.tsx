@@ -2,7 +2,6 @@
 
 import { useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { PatientShell } from "@/components/roleShells";
 import { PageHeader } from "@/components/DashboardShell";
 import { DoctorCard } from "@/components/DoctorCard";
 import { Pills } from "@/components/Tabs";
@@ -63,7 +62,7 @@ export function DoctorSearchClient({
   }
 
   return (
-    <PatientShell>
+    <>
       <PageHeader
         title="Find a doctor"
         subtitle={`${results.length} verified specialists ready to help`}
@@ -176,6 +175,6 @@ export function DoctorSearchClient({
           )}
         </div>
       </div>
-    </PatientShell>
+    </>
   );
 }

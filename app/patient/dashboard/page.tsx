@@ -10,7 +10,7 @@ import {
   getMedicalRecords,
   getNotifications,
 } from "@/lib/db";
-import { getUserId } from "@/lib/auth";
+import { getUserId, getSessionUser } from "@/lib/auth";
 
 const quickActions = [
   { icon: "💬", label: "Message a doctor", href: "/patient/messages" },
@@ -28,6 +28,8 @@ const vitals = [
 
 export default async function PatientDashboard() {
   const userId = await getUserId();
+  const session = await getSessionUser();
+  const firstName = (session?.name ?? "Alex").trim().split(/\s+/)[0];
   const [appointments, featuredDoctors, medicalRecords, notifications] = await Promise.all([
     getPatientAppointments(userId),
     getFeaturedDoctors(),
@@ -38,7 +40,7 @@ export default async function PatientDashboard() {
   return (
     <PatientShell>
       <PageHeader
-        title="Good afternoon, Alex"
+        title={`Good afternoon, ${firstName}`}
         subtitle="Here's a calm overview of your health today."
         action={
           <div className="flex flex-wrap gap-2">

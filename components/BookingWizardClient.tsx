@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { PatientShell } from "@/components/roleShells";
 import { Avatar, Button, Field, Stars } from "@/components/ui";
 import { bookingDays } from "@/lib/data";
 import type { Doctor } from "@/lib/data";
@@ -55,15 +54,11 @@ export function BookingWizardClient({ doctor }: { doctor: Doctor }) {
   }
 
   if (done) {
-    return (
-      <PatientShell>
-        <Confirmation doctor={doctor} mode={mode} day={bookingDays[day]} slot={slot} />
-      </PatientShell>
-    );
+    return <Confirmation doctor={doctor} mode={mode} day={bookingDays[day]} slot={slot} />;
   }
 
   return (
-    <PatientShell>
+    <>
       <Link href={`/patient/doctors/${doctor.id}`} className="text-sm text-ps hover:underline">
         ← Back to profile
       </Link>
@@ -252,7 +247,7 @@ export function BookingWizardClient({ doctor }: { doctor: Doctor }) {
           </div>
         </aside>
       </div>
-    </PatientShell>
+    </>
   );
 }
 

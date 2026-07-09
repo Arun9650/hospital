@@ -7,7 +7,12 @@
    ---------------------------------------------------------------------- */
 
 export const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
-export const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "";
+/* Supabase's newer "publishable" key (sb_publishable_…) is the successor to the
+   legacy anon JWT. Accept either so existing setups keep working. */
+export const SUPABASE_ANON_KEY =
+  process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ??
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ??
+  "";
 
 function looksReal(v: string) {
   return (

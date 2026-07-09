@@ -75,11 +75,11 @@ export function DashboardShell({
       <div className="flex">
         {/* Sidebar */}
         <aside
-          className={`fixed inset-y-0 left-0 top-16 z-30 w-64 transform border-r border-[#e7e7e7] bg-white transition-transform lg:static lg:top-0 lg:translate-x-0 ${
+          className={`fixed inset-y-0 left-0 top-16 z-30 flex w-64 transform flex-col border-r border-[#e7e7e7] bg-white transition-transform lg:sticky lg:top-16 lg:h-[calc(100vh-4rem)] lg:translate-x-0 ${
             open ? "translate-x-0" : "-translate-x-full"
           }`}
         >
-          <nav className="flex h-full flex-col gap-1 overflow-y-auto p-4">
+          <nav className="min-h-0 flex-1 space-y-1 overflow-y-auto p-4">
             {nav.map((item) => {
               const active = pathname === item.href;
               return (
@@ -98,23 +98,23 @@ export function DashboardShell({
                 </Link>
               );
             })}
-            <div className="mt-auto space-y-1 pt-4">
-              <Link
-                href="/"
-                className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-mute hover:bg-surface-soft"
-              >
-                <span aria-hidden>←</span> Back to site
-              </Link>
-              <form action={signOut}>
-                <button
-                  type="submit"
-                  className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-mute hover:bg-surface-soft"
-                >
-                  <span aria-hidden>⇥</span> Sign out
-                </button>
-              </form>
-            </div>
           </nav>
+          <div className="shrink-0 space-y-1 border-t border-[#e7e7e7] p-4">
+            <Link
+              href="/"
+              className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-mute hover:bg-surface-soft"
+            >
+              <span aria-hidden>←</span> Back to site
+            </Link>
+            <form action={signOut}>
+              <button
+                type="submit"
+                className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-mute hover:bg-surface-soft"
+              >
+                <span aria-hidden>⇥</span> Sign out
+              </button>
+            </form>
+          </div>
         </aside>
 
         {open && (

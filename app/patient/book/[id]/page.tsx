@@ -24,5 +24,9 @@ export default async function BookingPage({
     );
   }
 
-  return <BookingWizardClient doctor={doctor} />;
+  return (
+    <PatientShell>
+      <BookingWizardClient doctor={doctor} />
+    </PatientShell>
+  );
 }

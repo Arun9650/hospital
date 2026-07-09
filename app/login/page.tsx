@@ -6,9 +6,9 @@ import { signIn } from "@/lib/actions/auth";
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string }>;
+  searchParams: Promise<{ error?: string; next?: string; check_email?: string }>;
 }) {
-  const { error } = await searchParams;
+  const { error, next, check_email } = await searchParams;
   return (
     <AuthShell>
       <p className="eyebrow text-ps">Welcome back</p>
@@ -19,16 +19,24 @@ export default async function LoginPage({
         Continue where you left off — your care, records and doctors.
       </p>
 
+      {check_email && (
+        <p className="mt-4 rounded-lg bg-[#e5f5ee] px-4 py-3 text-sm text-success">
+          Almost there — we sent a confirmation link to{" "}
+          <span className="font-medium">{check_email}</span>. Check your email to activate your
+          account, then log in.
+        </p>
+      )}
       {error && (
         <p className="mt-4 rounded-lg bg-[#fbe7ea] px-4 py-3 text-sm text-warning">{error}</p>
       )}
 
       <form action={signIn} className="mt-8 space-y-5">
+        {next && <input type="hidden" name="next" value={next} />}
         <Field label="Email address">
-          <input type="email" name="email" required placeholder="you@email.com" className="field" defaultValue="you@email.com" />
+          <input type="email" name="email" required placeholder="you@email.com" className="field" />
         </Field>
         <Field label="Password">
-          <input type="password" name="password" required placeholder="••••••••" className="field" defaultValue="password" />
+          <input type="password" name="password" required placeholder="••••••••" className="field" />
         </Field>
         <div className="flex items-center justify-between text-sm">
           <label className="flex items-center gap-2 text-charcoal">

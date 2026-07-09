@@ -2,6 +2,8 @@ import type { Metadata, Viewport } from "next";
 import { Roboto, Inter } from "next/font/google";
 import "./globals.css";
 import { ServiceWorkerRegister } from "@/components/ServiceWorkerRegister";
+import { SessionProvider } from "@/components/SessionProvider";
+import { getSessionUser } from "@/lib/auth";
 
 const display = Roboto({
   variable: "--font-display",
@@ -43,18 +45,19 @@ export const viewport: Viewport = {
   viewportFit: "cover",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const user = await getSessionUser();
   return (
     <html
       lang="en"
       className={`${display.variable} ${sans.variable} h-full`}
     >
       <body className="min-h-full">
-        {children}
+        <SessionProvider user={user}>{children}</SessionProvider>
         <ServiceWorkerRegister />
       </body>
     </html>
