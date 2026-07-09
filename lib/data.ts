@@ -12,6 +12,8 @@ export type Specialty = {
 
 export type Doctor = {
   id: string;
+  /** Linked auth profile id — only real (registered) doctors have one. */
+  profile_id?: string;
   name: string;
   specialty: string;
   specialtySlug: string;

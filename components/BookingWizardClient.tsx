@@ -30,6 +30,7 @@ export function BookingWizardClient({ doctor }: { doctor: Doctor }) {
   const [reason, setReason] = useState("");
   const [done, setDone] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [apptId, setApptId] = useState<string | undefined>();
 
   const canNext =
     (step === 0 && mode) ||
@@ -39,7 +40,7 @@ export function BookingWizardClient({ doctor }: { doctor: Doctor }) {
 
   async function handleConfirm() {
     setSaving(true);
-    await createAppointment({
+    const res = await createAppointment({
       doctorId: doctor.id,
       doctorName: doctor.name,
       specialty: doctor.specialty,
@@ -49,12 +50,21 @@ export function BookingWizardClient({ doctor }: { doctor: Doctor }) {
       fee: doctor.fee,
       reason,
     });
+    setApptId(res.id);
     setSaving(false);
     setDone(true);
   }
 
   if (done) {
-    return <Confirmation doctor={doctor} mode={mode} day={bookingDays[day]} slot={slot} />;
+    return (
+      <Confirmation
+        doctor={doctor}
+        mode={mode}
+        day={bookingDays[day]}
+        slot={slot}
+        apptId={apptId}
+      />
+    );
   }
 
   return (
@@ -265,11 +275,13 @@ function Confirmation({
   mode,
   day,
   slot,
+  apptId,
 }: {
   doctor: Doctor;
   mode: string;
   day: (typeof bookingDays)[number];
   slot: string;
+  apptId?: string;
 }) {
   return (
     <div className="mx-auto max-w-2xl">
@@ -303,7 +315,9 @@ function Confirmation({
             {mode === "Chat" ? (
               <Button href={`/patient/messages?doctor=${doctor.id}`}>Open chat</Button>
             ) : (
-              <Button href="/patient/consultation">Join consultation</Button>
+              <Button href={apptId ? `/consultation/${apptId}` : "/patient/consultation"}>
+                Join consultation
+              </Button>
             )}
             <Button href="/patient/appointments" variant="light">View appointments</Button>
           </div>

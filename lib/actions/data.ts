@@ -16,27 +16,32 @@ export async function createAppointment(input: {
   time: string;
   fee: number;
   reason: string;
-}): Promise<Result> {
+}): Promise<Result & { id?: string }> {
   if (!isSupabaseConfigured) return { ok: true };
   try {
     const sb = await createServerSupabase();
     const {
       data: { user },
     } = await sb.auth.getUser();
-    await sb.from("appointments").insert({
-      doctor_id: input.doctorId,
-      doctor_name: input.doctorName,
-      specialty: input.specialty,
-      patient_id: user?.id ?? null,
-      patient_name: (user?.user_metadata?.full_name as string) || "You",
-      date_label: input.date,
-      time_label: input.time,
-      mode: input.mode,
-      status: "Upcoming",
-      fee: input.fee,
-      reason: input.reason || "General consultation",
-    });
-    return { ok: true };
+    const { data, error } = await sb
+      .from("appointments")
+      .insert({
+        doctor_id: input.doctorId,
+        doctor_name: input.doctorName,
+        specialty: input.specialty,
+        patient_id: user?.id ?? null,
+        patient_name: (user?.user_metadata?.full_name as string) || "You",
+        date_label: input.date,
+        time_label: input.time,
+        mode: input.mode,
+        status: "Upcoming",
+        fee: input.fee,
+        reason: input.reason || "General consultation",
+      })
+      .select("id")
+      .single();
+    if (error) return { ok: false };
+    return { ok: true, id: String(data.id) };
   } catch {
     return { ok: false };
   }

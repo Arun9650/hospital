@@ -31,6 +31,7 @@ type Row = Record<string, unknown>;
 function mapDoctor(r: Row): Doctor {
   return {
     id: String(r.id),
+    profile_id: String(r.profile_id ?? ""),
     name: String(r.name),
     specialty: String(r.specialty),
     specialtySlug: String(r.specialty_slug ?? ""),

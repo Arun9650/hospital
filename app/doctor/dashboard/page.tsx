@@ -4,6 +4,7 @@ import { PageHeader } from "@/components/DashboardShell";
 import { Avatar, Badge, Button, Stat } from "@/components/ui";
 import { earnings } from "@/lib/data";
 import { getDoctorAppointments } from "@/lib/db";
+import { getSessionUser } from "@/lib/auth";
 
 const todayStats = [
   { label: "Today's appointments", value: "8", sub: "2 upcoming" },
@@ -20,11 +21,13 @@ const schedule = [
 ];
 
 export default async function DoctorDashboard() {
-  const appointmentRequests = await getDoctorAppointments("dr-anaya-rao");
+  const user  = await getSessionUser();
+  console.log("🚀 ~ DoctorDashboard ~ user:", user)
+  const appointmentRequests = await getDoctorAppointments(user?.name as string);
   return (
     <DoctorShell>
       <PageHeader
-        title="Welcome back, Dr. Rao"
+        title={"Welcome back, Dr. " + user?.name}
         subtitle="Here's your practice at a glance."
         action={
           <div className="flex items-center gap-2">

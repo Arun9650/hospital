@@ -10,6 +10,7 @@ import { getUserId } from "@/lib/auth";
 
 export default async function AppointmentsPage() {
   const userId = await getUserId();
+  console.log("🚀 ~ AppointmentsPage ~ userId:", userId)
   const appointments = await getPatientAppointments(userId);
   const upcoming = appointments.filter((a) => a.status === "Upcoming");
   const completed = appointments.filter((a) => a.status === "Completed");

@@ -58,7 +58,7 @@ export function DoctorRequestsClient({ requests }: { requests: Appointment[] }) 
                     </>
                   ) : s === "Accepted" ? (
                     <>
-                      <Link href="/doctor/consultation" className="btn btn-primary btn-sm">Start</Link>
+                      <Link href={`/consultation/${r.id}`} className="btn btn-primary btn-sm">Start</Link>
                       <Link href="/doctor/patients" className="btn btn-light btn-sm">History</Link>
                     </>
                   ) : (

@@ -46,6 +46,16 @@ export async function updateSession(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   const { pathname } = request.nextUrl;
+
+  // The shared consultation room is open to any signed-in user (patient OR
+  // doctor), so it isn't tied to a single role area.
+  if (pathname.startsWith("/consultation") && !user) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/login";
+    url.searchParams.set("next", pathname);
+    return NextResponse.redirect(url);
+  }
+
   const area = ROLE_AREAS.find(
     (a) => pathname === a.prefix || pathname.startsWith(a.prefix + "/")
   );

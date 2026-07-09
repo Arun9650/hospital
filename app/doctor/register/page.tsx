@@ -15,6 +15,7 @@ export default function DoctorRegister() {
   const [spec, setSpec] = useState<string[]>([]);
   const [files, setFiles] = useState<string[]>([]);
   const [account, setAccount] = useState({ name: "", email: "", password: "" });
+  const [creds, setCreds] = useState({ experience: "", fee: "", qualifications: "" });
 
   function addFile(name: string) {
     setFiles((f) => (f.includes(name) ? f : [...f, name]));
@@ -68,17 +69,29 @@ export default function DoctorRegister() {
         )}
 
         {step === 1 && (
-          <form className="space-y-5" onSubmit={(e) => { e.preventDefault(); setStep(2); }}>
+          <form
+            className="space-y-5"
+            onSubmit={(e) => {
+              e.preventDefault();
+              const f = new FormData(e.currentTarget);
+              setCreds({
+                experience: String(f.get("experience") ?? ""),
+                fee: String(f.get("fee") ?? ""),
+                qualifications: String(f.get("qualifications") ?? ""),
+              });
+              setStep(2);
+            }}
+          >
             <div>
               <span className="mb-2 block text-sm font-medium text-charcoal">Primary specialty</span>
               <Pills options={specialties.slice(0, 8).map((s) => s.name)} value={spec} onChange={setSpec} />
             </div>
             <div className="grid gap-5 sm:grid-cols-2">
-              <Field label="Years of experience"><input type="number" min={0} placeholder="10" className="field" /></Field>
-              <Field label="Consultation fee (USD)"><input type="number" min={0} placeholder="40" className="field" /></Field>
+              <Field label="Years of experience"><input name="experience" type="number" min={0} placeholder="10" className="field" defaultValue={creds.experience} /></Field>
+              <Field label="Consultation fee (USD)"><input name="fee" type="number" min={0} placeholder="40" className="field" defaultValue={creds.fee} /></Field>
             </div>
             <Field label="Medical registration / license no."><input required placeholder="MCI-2025-XXXX" className="field" /></Field>
-            <Field label="Qualifications"><input placeholder="MD, DM (Cardiology)" className="field" /></Field>
+            <Field label="Qualifications"><input name="qualifications" placeholder="MD, DM (Cardiology)" className="field" defaultValue={creds.qualifications} /></Field>
             <div className="flex gap-3">
               <Button variant="light" className="flex-1" onClick={() => setStep(0)}>Back</Button>
               <Button type="submit" className="flex-1">Continue</Button>
@@ -130,6 +143,9 @@ export default function DoctorRegister() {
             <input type="hidden" name="email" value={account.email} />
             <input type="hidden" name="password" value={account.password} />
             <input type="hidden" name="specialty" value={spec[0] ?? ""} />
+            <input type="hidden" name="experience" value={creds.experience} />
+            <input type="hidden" name="fee" value={creds.fee} />
+            <input type="hidden" name="qualifications" value={creds.qualifications} />
 
             <div className="rounded-lg bg-[#eaf3fc] p-5">
               <div className="flex items-center gap-3">
