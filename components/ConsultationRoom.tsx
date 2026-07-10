@@ -47,6 +47,7 @@ export function ConsultationRoom({
   const pcRef = useRef<RTCPeerConnection | null>(null);
   const channelRef = useRef<RealtimeChannel | null>(null);
   const localStream = useRef<MediaStream | null>(null);
+  const remoteStream = useRef<MediaStream | null>(null);
   const pendingIce = useRef<RTCIceCandidateInit[]>([]);
   const chatRef = useRef<HTMLDivElement>(null);
 
@@ -133,8 +134,29 @@ export function ConsultationRoom({
         }
       };
       pc.ontrack = (e) => {
-        log("● ontrack", e.track.kind, "streams:", e.streams.length);
-        if (remoteVideo.current && e.streams[0]) remoteVideo.current.srcObject = e.streams[0];
+        log("● ontrack", e.track.kind, "readyState:", e.track.readyState, "streams:", e.streams.length);
+        // Prefer the stream the sender associated with the track; if there is
+        // none (some negotiation paths omit it), accumulate tracks into our own
+        // MediaStream so both audio and video land on the same element.
+        let stream = e.streams[0];
+        if (!stream) {
+          stream = remoteStream.current ?? new MediaStream();
+          remoteStream.current = stream;
+          if (!stream.getTracks().includes(e.track)) stream.addTrack(e.track);
+          log("  no stream on track — wrapped into synthetic remote stream");
+        } else {
+          remoteStream.current = stream;
+        }
+        const el = remoteVideo.current;
+        if (el && el.srcObject !== stream) {
+          el.srcObject = stream;
+          log("  attached remote stream to <video>");
+        }
+        // Autoplay of a stream that carries audio is often blocked until a user
+        // gesture — call play() explicitly and surface any rejection.
+        el?.play()
+          .then(() => log("  remote <video> playing"))
+          .catch((err) => warn("  remote <video> play() blocked:", (err as Error).name, "— will retry on click"));
         setRemoteActive(true);
       };
       pc.onconnectionstatechange = () => {
@@ -333,6 +355,7 @@ export function ConsultationRoom({
       localStream.current = null;
       channelRef.current?.unsubscribe();
       channelRef.current = null;
+      remoteStream.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [configured, roomId]);
@@ -411,6 +434,7 @@ export function ConsultationRoom({
               ref={remoteVideo}
               autoPlay
               playsInline
+              onClick={() => remoteVideo.current?.play().catch(() => {})}
               className={`h-full w-full object-cover ${remoteActive ? "" : "hidden"}`}
             />
             {!remoteActive && (
