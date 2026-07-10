@@ -265,7 +265,8 @@ export async function getDoctorAppointments(doctorId: string): Promise<Appointme
       .from("appointments")
       .select("*")
       .eq("doctor_id", doctorId)
-      .neq("patient_name", "You");
+      .neq("patient_name", "You")
+      .order("created_at", { ascending: false });
     if (error || !data?.length) return mock.appointmentRequests;
     return data.map(mapAppointment);
   } catch {

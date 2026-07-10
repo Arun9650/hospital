@@ -64,7 +64,7 @@ export default async function DoctorDashboard() {
                     </div>
                   </div>
                   {s.status === "Upcoming" ? (
-                    <Button href="/doctor/consultation" size="sm">Start</Button>
+                    <Button href="/doctor/appointments" size="sm">Start</Button>
                   ) : (
                     <Badge tone="green">Done</Badge>
                   )}

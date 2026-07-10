@@ -315,7 +315,7 @@ function Confirmation({
             {mode === "Chat" ? (
               <Button href={`/patient/messages?doctor=${doctor.id}`}>Open chat</Button>
             ) : (
-              <Button href={apptId ? `/consultation/${apptId}` : "/patient/consultation"}>
+              <Button href={apptId ? `/consultation/${apptId}` : "/patient/appointments"}>
                 Join consultation
               </Button>
             )}

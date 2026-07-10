@@ -79,7 +79,7 @@ export default function DoctorPatients() {
           </div>
 
           <div className="mt-6 flex gap-2">
-            <Button href="/doctor/consultation" size="sm">Start consultation</Button>
+            <Button href="/doctor/appointments" size="sm">Start consultation</Button>
             <Button href="/doctor/prescriptions" variant="light" size="sm">Write prescription</Button>
           </div>
         </div>

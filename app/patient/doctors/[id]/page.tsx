@@ -163,7 +163,7 @@ export default async function DoctorProfile({
               <Button href={`/patient/book/${doctor.id}`} variant="light" full>
                 Book appointment
               </Button>
-              <Button href="/patient/consultation" variant="ghost" full>
+              <Button href="/patient/appointments" variant="ghost" full>
                 Instant video consult
               </Button>
             </div>

@@ -55,6 +55,7 @@ export function ConsultationRoom({
   );
   const [remoteActive, setRemoteActive] = useState(false);
   const [mediaError, setMediaError] = useState(false);
+  const [channelError, setChannelError] = useState(false);
   const [muted, setMuted] = useState(false);
   const [camOff, setCamOff] = useState(false);
   const [seconds, setSeconds] = useState(0);
@@ -81,22 +82,64 @@ export function ConsultationRoom({
     }
     let cancelled = false;
 
+    const tag = `[RTC ${me.role} ${clientId.slice(0, 6)}]`;
+    const log = (...args: unknown[]) => console.log(tag, ...args);
+    const warn = (...args: unknown[]) => console.warn(tag, ...args);
+    log("room mount", { roomId, configured, me });
+
     function send(event: "signal" | "chat", payload: unknown) {
-      channelRef.current?.send({ type: "broadcast", event, payload });
+      const p = payload as { kind?: string };
+      log("→ send", event, p?.kind ?? "");
+      channelRef.current
+        ?.send({ type: "broadcast", event, payload })
+        .then((res) => log("  send ack", event, p?.kind ?? "", res))
+        .catch((e) => warn("  send FAILED", event, e));
     }
 
     function newPeer() {
+      log("creating RTCPeerConnection", ICE_SERVERS);
       const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
-      localStream.current?.getTracks().forEach((tr) => pc.addTrack(tr, localStream.current!));
+      const tracks = localStream.current?.getTracks() ?? [];
+      if (tracks.length) {
+        log("adding local tracks:", tracks.map((t) => `${t.kind}:${t.readyState}`));
+        tracks.forEach((tr) => pc.addTrack(tr, localStream.current!));
+      } else {
+        // No local media (denied/unavailable): still add recv-only transceivers
+        // so the offer has m-lines and ICE actually negotiates. Without this an
+        // empty offer leaves the connection stuck in "connecting" forever.
+        warn("no local media — adding recv-only audio/video transceivers");
+        pc.addTransceiver("audio", { direction: "recvonly" });
+        pc.addTransceiver("video", { direction: "recvonly" });
+      }
+
       pc.onicecandidate = (e) => {
-        if (e.candidate) send("signal", { from: clientId, kind: "ice", candidate: e.candidate.toJSON() });
+        if (e.candidate) {
+          log("← local ICE candidate", e.candidate.type, e.candidate.protocol, e.candidate.address ?? "");
+          send("signal", { from: clientId, kind: "ice", candidate: e.candidate.toJSON() });
+        } else {
+          log("← local ICE gathering COMPLETE (null candidate)");
+        }
+      };
+      pc.onicecandidateerror = (e) => {
+        const ev = e as RTCPeerConnectionIceErrorEvent;
+        warn("ICE candidate error", { url: ev.url, code: ev.errorCode, text: ev.errorText });
+      };
+      pc.onicegatheringstatechange = () => log("iceGatheringState:", pc.iceGatheringState);
+      pc.onsignalingstatechange = () => log("signalingState:", pc.signalingState);
+      pc.oniceconnectionstatechange = () => {
+        log("iceConnectionState:", pc.iceConnectionState);
+        if (pc.iceConnectionState === "failed") {
+          warn("ICE FAILED — no working candidate pair. Likely NAT/firewall with no TURN server.");
+        }
       };
       pc.ontrack = (e) => {
+        log("● ontrack", e.track.kind, "streams:", e.streams.length);
         if (remoteVideo.current && e.streams[0]) remoteVideo.current.srcObject = e.streams[0];
         setRemoteActive(true);
       };
       pc.onconnectionstatechange = () => {
         const s = pc.connectionState;
+        log("connectionState:", s);
         if (s === "connected") setStatus("connected");
         else if (s === "failed" || s === "disconnected") setRemoteActive(false);
       };
@@ -106,61 +149,120 @@ export function ConsultationRoom({
     async function flushIce() {
       const pc = pcRef.current;
       if (!pc) return;
-      for (const c of pendingIce.current.splice(0)) {
+      const buffered = pendingIce.current.splice(0);
+      if (buffered.length) log("flushing", buffered.length, "buffered ICE candidates");
+      for (const c of buffered) {
         try {
           await pc.addIceCandidate(c);
-        } catch {
-          /* ignore late/failed candidates */
+        } catch (e) {
+          warn("addIceCandidate (buffered) failed", e);
         }
       }
     }
 
     async function makeOffer() {
       const pc = pcRef.current;
-      if (!pc || pc.signalingState !== "stable") return;
+      if (!pc) return warn("makeOffer: no peer connection");
+      if (pc.signalingState !== "stable") {
+        log("makeOffer skipped, signalingState:", pc.signalingState);
+        return;
+      }
+      log("makeOffer: creating offer…");
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
+      log("makeOffer: local description set, broadcasting offer");
       send("signal", { from: clientId, kind: "offer", sdp: offer });
     }
 
     async function onSignal(msg: Signal) {
       if (msg.from === clientId) return;
       const pc = pcRef.current;
-      if (!pc) return;
+      if (!pc) return warn("onSignal: no peer connection for", msg.kind);
+      log("↓ recv signal", msg.kind, "from", msg.from.slice(0, 6));
       if (msg.kind === "offer") {
+        log("  applying remote offer, signalingState:", pc.signalingState);
         await pc.setRemoteDescription(msg.sdp);
         await flushIce();
         const answer = await pc.createAnswer();
         await pc.setLocalDescription(answer);
+        log("  answer created + local set, broadcasting answer");
         send("signal", { from: clientId, kind: "answer", sdp: answer });
         setStatus("connecting");
       } else if (msg.kind === "answer") {
-        if (!pc.currentRemoteDescription) await pc.setRemoteDescription(msg.sdp);
+        if (!pc.currentRemoteDescription) {
+          log("  applying remote answer");
+          await pc.setRemoteDescription(msg.sdp);
+        } else {
+          log("  answer ignored (already have remote description)");
+        }
         await flushIce();
       } else if (msg.kind === "ice") {
         if (pc.remoteDescription) {
           try {
             await pc.addIceCandidate(msg.candidate);
-          } catch {
-            /* ignore */
+            log("  added remote ICE candidate");
+          } catch (e) {
+            warn("  addIceCandidate failed", e);
           }
         } else {
+          log("  buffering remote ICE candidate (no remote description yet)");
           pendingIce.current.push(msg.candidate);
         }
       }
     }
 
+    const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+    // Acquire camera + mic, tolerant of the common real-world failures:
+    //  • NotReadableError / AbortError ("Device in use") — another tab/app (or,
+    //    in dev, React StrictMode's double-mount) holds the camera. Retry a few
+    //    times; the other holder usually releases within a moment.
+    //  • Video unavailable (no camera / constraints) — fall back to audio-only.
+    //  • NotAllowedError — permission denied; give up (recv-only).
+    async function acquireMedia(): Promise<MediaStream | null> {
+      for (let attempt = 1; attempt <= 4; attempt++) {
+        try {
+          log(`requesting camera + mic… (attempt ${attempt})`);
+          return await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        } catch (e) {
+          const err = e as DOMException;
+          warn(`getUserMedia failed (attempt ${attempt}):`, err.name, err.message);
+          if (err.name === "NotAllowedError" || err.name === "SecurityError") {
+            warn("permission denied / insecure context — giving up on local media");
+            return null;
+          }
+          if (err.name === "NotReadableError" || err.name === "AbortError") {
+            if (attempt < 4) {
+              await sleep(500 * attempt); // camera busy — back off and retry
+              continue;
+            }
+          }
+          // Last resort: try audio-only (works even when the camera is taken).
+          try {
+            log("falling back to audio-only…");
+            return await navigator.mediaDevices.getUserMedia({ video: false, audio: true });
+          } catch (e2) {
+            warn("audio-only also failed:", (e2 as DOMException).name);
+            return null;
+          }
+        }
+      }
+      return null;
+    }
+
     (async () => {
       // 1. Local media (fall back to chat-only if denied / unavailable).
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-        if (cancelled) {
-          stream.getTracks().forEach((t) => t.stop());
-          return;
-        }
+      const stream = await acquireMedia();
+      if (cancelled) {
+        stream?.getTracks().forEach((t) => t.stop());
+        return;
+      }
+      if (stream) {
         localStream.current = stream;
+        log("got local media:", stream.getTracks().map((t) => `${t.kind}:${t.readyState}`));
         if (localVideo.current) localVideo.current.srcObject = stream;
-      } catch {
+      } else {
+        warn("continuing without local media (recv-only) — you can still see/hear the other side");
         setMediaError(true);
       }
       if (cancelled) return;
@@ -170,6 +272,7 @@ export function ConsultationRoom({
       setStatus("waiting");
 
       // 3. Signaling channel (Supabase Realtime broadcast + presence).
+      log("creating Supabase channel", `room:${roomId}`);
       const sb = createClient();
       const channel = sb.channel(`room:${roomId}`, {
         config: { broadcast: { self: false }, presence: { key: clientId } },
@@ -184,7 +287,9 @@ export function ConsultationRoom({
       channel.on("presence", { event: "sync" }, () => {
         const ids = Object.keys(channel.presenceState());
         const others = ids.filter((id) => id !== clientId);
+        log("presence sync — peers in room:", ids.length, "others:", others.map((o) => o.slice(0, 6)));
         if (others.length === 0) {
+          log("  alone in room, waiting for the other party");
           setStatus((s) => (s === "connected" ? "connected" : "waiting"));
           setRemoteActive(false);
           return;
@@ -192,6 +297,7 @@ export function ConsultationRoom({
         // Deterministic single offerer: the greater clientId initiates. This
         // avoids offer glare entirely for a 1:1 room.
         const shouldOffer = others.every((id) => clientId > id);
+        log("  other party present. I am the", shouldOffer ? "OFFERER" : "ANSWERER");
         if (shouldOffer) {
           setStatus("connecting");
           void makeOffer();
@@ -200,14 +306,26 @@ export function ConsultationRoom({
         }
       });
 
-      await channel.subscribe(async (s) => {
+      log("subscribing to channel…");
+      await channel.subscribe(async (s, err) => {
+        log("channel status:", s, err ?? "");
         if (s === "SUBSCRIBED") {
+          setChannelError(false);
+          log("SUBSCRIBED — tracking presence");
           await channel.track({ clientId, role: me.role, name: me.name });
+        } else if (s === "CHANNEL_ERROR" || s === "TIMED_OUT") {
+          // Surface a genuine failure instead of sitting silently on "waiting" —
+          // the room can never connect if the signaling channel didn't come up.
+          // (CLOSED is intentionally excluded: it also fires on normal unmount /
+          // React StrictMode teardown, which is not an error.)
+          console.error(`${tag} realtime channel ${s}`, err);
+          setChannelError(true);
         }
       });
     })();
 
     return () => {
+      log("room unmount — tearing down peer + channel");
       cancelled = true;
       pcRef.current?.close();
       pcRef.current = null;
@@ -259,6 +377,8 @@ export function ConsultationRoom({
   const statusLabel =
     status === "connected"
       ? `Live · ${mm}:${ss}`
+      : channelError
+      ? "Connection problem"
       : status === "connecting"
       ? "Connecting…"
       : !configured
@@ -299,10 +419,16 @@ export function ConsultationRoom({
                   <span className="h-3 w-3 animate-ping rounded-full bg-white/40" />
                 </div>
                 <p className="mt-4 font-display text-2xl font-light capitalize">
-                  {status === "connecting" ? "Connecting…" : `Waiting for the ${other}`}
+                  {channelError
+                    ? "Can't reach the room"
+                    : status === "connecting"
+                    ? "Connecting…"
+                    : `Waiting for the ${other}`}
                 </p>
                 <p className="text-sm text-white/50">
-                  {configured
+                  {channelError
+                    ? "The live connection couldn't be established. Check your network and refresh to try again."
+                    : configured
                     ? "The room is live — they'll appear here as soon as they join."
                     : "Live calls need the connected backend. Chat works locally."}
                 </p>

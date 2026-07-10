@@ -23,6 +23,25 @@ export async function createAppointment(input: {
     const {
       data: { user },
     } = await sb.auth.getUser();
+
+    // Reuse an existing active booking for the same patient/doctor/slot instead
+    // of piling up duplicates. Duplicate rows are indistinguishable, so the
+    // patient and doctor can end up opening different /consultation/<id> rooms
+    // and never meet. One slot = one appointment = one shared room.
+    if (user?.id) {
+      const { data: existing } = await sb
+        .from("appointments")
+        .select("id")
+        .eq("patient_id", user.id)
+        .eq("doctor_id", input.doctorId)
+        .eq("date_label", input.date)
+        .eq("time_label", input.time)
+        .eq("status", "Upcoming")
+        .limit(1)
+        .maybeSingle();
+      if (existing) return { ok: true, id: String(existing.id) };
+    }
+
     const { data, error } = await sb
       .from("appointments")
       .insert({
