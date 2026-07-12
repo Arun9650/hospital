@@ -1,13 +1,10 @@
 import { DoctorShell } from "@/components/roleShells";
 import { DoctorRequestsClient } from "@/components/DoctorRequestsClient";
-import { getDoctorAppointments, getDoctors } from "@/lib/db";
-import { getSessionUser, getUserId } from "@/lib/auth";
+import { getDoctorAppointments, getCurrentDoctor } from "@/lib/db";
 
 export default async function DoctorAppointments() {
-  const userId = await getSessionUser();
-  const doctors = await getDoctors();
-  const doctor = doctors.find((d) => d.profile_id === userId?.id);
-  const requests = await getDoctorAppointments(doctor?.id as string);
+  const doctor = await getCurrentDoctor();
+  const requests = doctor ? await getDoctorAppointments(doctor.id) : [];
   return (
     <DoctorShell>
       <DoctorRequestsClient requests={requests} />

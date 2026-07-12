@@ -3,8 +3,14 @@ import { DoctorShell } from "@/components/roleShells";
 import { PageHeader } from "@/components/DashboardShell";
 import { Avatar, Badge, Button, Stat } from "@/components/ui";
 import { earnings } from "@/lib/data";
-import { getDoctorAppointments } from "@/lib/db";
+import { getDoctorAppointments, getCurrentDoctor } from "@/lib/db";
 import { getSessionUser } from "@/lib/auth";
+
+/** "Dr. Anaya Rao" / "Anaya Rao" → "Dr. Anaya Rao" without doubling the title. */
+function withDoctorTitle(name?: string) {
+  const n = (name ?? "Doctor").trim();
+  return /^dr\.?\s/i.test(n) ? n : `Dr. ${n}`;
+}
 
 const todayStats = [
   { label: "Today's appointments", value: "8", sub: "2 upcoming" },
@@ -21,13 +27,15 @@ const schedule = [
 ];
 
 export default async function DoctorDashboard() {
-  const user  = await getSessionUser();
-  console.log("🚀 ~ DoctorDashboard ~ user:", user)
-  const appointmentRequests = await getDoctorAppointments(user?.name as string);
+  const user = await getSessionUser();
+  const doctor = await getCurrentDoctor();
+  // Was passing the doctor's *name* where a doctor_id is required → never matched
+  // and silently fell back to mock data. Resolve the real catalog id instead.
+  const appointmentRequests = doctor ? await getDoctorAppointments(doctor.id) : [];
   return (
     <DoctorShell>
       <PageHeader
-        title={"Welcome back, Dr. " + user?.name}
+        title={`Welcome back, ${withDoctorTitle(user?.name)}`}
         subtitle="Here's your practice at a glance."
         action={
           <div className="flex items-center gap-2">

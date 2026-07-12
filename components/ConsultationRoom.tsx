@@ -8,6 +8,7 @@ import { Icon } from "@/components/Icon";
 import { Logo } from "@/components/Logo";
 import { createClient } from "@/lib/supabase/client";
 import { updateAppointmentStatus } from "@/lib/actions/data";
+import { getIceServers } from "@/lib/webrtc/ice";
 
 export type RoomUser = {
   role: "patient" | "doctor";
@@ -22,22 +23,11 @@ type Signal =
   | { from: string; kind: "offer" | "answer"; sdp: RTCSessionDescriptionInit }
   | { from: string; kind: "ice"; candidate: RTCIceCandidateInit };
 
-// STUN discovers each peer's public address; TURN relays media when a direct
-// path can't be found (symmetric NAT / restrictive firewalls) — without a TURN
-// server ~15-20% of real-world calls silently fail to connect. The relay
-// credentials below are Open Relay's free public TURN service.
-const ICE_SERVERS: RTCIceServer[] = [
-  { urls: ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302"] },
-  {
-    urls: [
-      "turn:openrelay.metered.ca:80",
-      "turn:openrelay.metered.ca:443",
-      "turn:openrelay.metered.ca:443?transport=tcp",
-    ],
-    username: "openrelayproject",
-    credential: "openrelayproject",
-  },
-];
+const ICE_SERVERS = getIceServers();
+
+// How long to wait for a peer connection to reach "connected" before declaring
+// the attempt failed and offering a retry (instead of a hung "Connecting…").
+const CONNECT_TIMEOUT_MS = 20_000;
 
 // Verbose WebRTC tracing is noisy in production; keep it behind an opt-in flag
 // (set localStorage.rtcDebug = "1" to enable while debugging a call).
@@ -70,19 +60,26 @@ export function ConsultationRoom({
   const remoteStream = useRef<MediaStream | null>(null);
   const pendingIce = useRef<RTCIceCandidateInit[]>([]);
   const chatRef = useRef<HTMLDivElement>(null);
+  const isOffererRef = useRef(false);
+  const reofferTimer = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const [status, setStatus] = useState<"init" | "waiting" | "connecting" | "connected" | "ended">(
-    "init"
-  );
+  const [status, setStatus] = useState<
+    "init" | "waiting" | "connecting" | "connected" | "ended" | "failed"
+  >(configured ? "init" : "waiting");
   const [remoteActive, setRemoteActive] = useState(false);
   const [remoteEnded, setRemoteEnded] = useState(false);
   const [mediaError, setMediaError] = useState(false);
+  const [mediaMsg, setMediaMsg] = useState("");
   const [channelError, setChannelError] = useState(false);
   const [muted, setMuted] = useState(false);
   const [camOff, setCamOff] = useState(false);
   const [seconds, setSeconds] = useState(0);
   const [chat, setChat] = useState<ChatLine[]>([]);
   const [draft, setDraft] = useState("");
+  // Bumping `retry` fully tears down and re-runs the connection effect.
+  const [retry, setRetry] = useState(0);
+  // Browsers often block remote audio until a user gesture — surface a tap target.
+  const [needsAudioUnlock, setNeedsAudioUnlock] = useState(false);
 
   const other = me.role === "patient" ? "doctor" : "patient";
 
@@ -93,15 +90,33 @@ export function ConsultationRoom({
     return () => clearInterval(t);
   }, [status]);
 
+  // Watchdog: if we're actively negotiating but never reach "connected", stop
+  // spinning on "Connecting…" and surface a retryable failure.
+  useEffect(() => {
+    if (status !== "connecting") return;
+    const t = setTimeout(() => {
+      setStatus((s) => (s === "connecting" ? "failed" : s));
+    }, CONNECT_TIMEOUT_MS);
+    return () => clearTimeout(t);
+  }, [status]);
+
   useEffect(() => {
     chatRef.current?.scrollTo({ top: chatRef.current.scrollHeight });
   }, [chat]);
 
+  // Remote <video> must be visible before play() or browsers drop/mute audio.
+  // Retry whenever we get a stream or the element becomes active.
   useEffect(() => {
-    if (!configured) {
-      setStatus("waiting");
-      return;
-    }
+    if (!remoteActive) return;
+    const el = remoteVideo.current;
+    if (!el?.srcObject) return;
+    el.play()
+      .then(() => setNeedsAudioUnlock(false))
+      .catch(() => setNeedsAudioUnlock(true));
+  }, [remoteActive]);
+
+  useEffect(() => {
+    if (!configured) return;
     let cancelled = false;
 
     const tag = `[RTC ${me.role} ${clientId.slice(0, 6)}]`;
@@ -149,44 +164,75 @@ export function ConsultationRoom({
       pc.onicegatheringstatechange = () => log("iceGatheringState:", pc.iceGatheringState);
       pc.onsignalingstatechange = () => log("signalingState:", pc.signalingState);
       pc.oniceconnectionstatechange = () => {
-        log("iceConnectionState:", pc.iceConnectionState);
-        if (pc.iceConnectionState === "failed") {
-          warn("ICE FAILED — no working candidate pair. Likely NAT/firewall with no TURN server.");
+        const s = pc.iceConnectionState;
+        log("iceConnectionState:", s);
+        // iceConnectionState is the most reliable "we have media" signal across
+        // browsers — connectionState sometimes lags or never flips to connected.
+        if (s === "connected" || s === "completed") markConnected();
+        else if (s === "failed") {
+          warn("ICE FAILED — no working candidate pair; attempting ICE restart.");
+          recover();
         }
       };
       pc.ontrack = (e) => {
         log("● ontrack", e.track.kind, "readyState:", e.track.readyState, "streams:", e.streams.length);
-        // Prefer the stream the sender associated with the track; if there is
-        // none (some negotiation paths omit it), accumulate tracks into our own
-        // MediaStream so both audio and video land on the same element.
-        let stream = e.streams[0];
-        if (!stream) {
-          stream = remoteStream.current ?? new MediaStream();
-          remoteStream.current = stream;
-          if (!stream.getTracks().includes(e.track)) stream.addTrack(e.track);
-          log("  no stream on track — wrapped into synthetic remote stream");
-        } else {
-          remoteStream.current = stream;
+        // Always merge into one synthetic stream. Browsers often attach audio and
+        // video to *different* MediaStream objects; replacing srcObject on each
+        // ontrack drops the earlier track (silent remote / frozen video).
+        const stream = remoteStream.current ?? new MediaStream();
+        remoteStream.current = stream;
+        if (!stream.getTracks().includes(e.track)) {
+          stream.addTrack(e.track);
+          log("  added", e.track.kind, "to merged remote stream");
         }
+        setRemoteActive(true);
         const el = remoteVideo.current;
         if (el && el.srcObject !== stream) {
           el.srcObject = stream;
-          log("  attached remote stream to <video>");
+          log("  attached merged remote stream to <video>");
         }
-        // Autoplay of a stream that carries audio is often blocked until a user
-        // gesture — call play() explicitly and surface any rejection.
-        el?.play()
-          .then(() => log("  remote <video> playing"))
-          .catch((err) => warn("  remote <video> play() blocked:", (err as Error).name, "— will retry on click"));
-        setRemoteActive(true);
       };
       pc.onconnectionstatechange = () => {
         const s = pc.connectionState;
         log("connectionState:", s);
-        if (s === "connected") setStatus("connected");
-        else if (s === "failed" || s === "disconnected") setRemoteActive(false);
+        if (s === "connected") markConnected();
+        else if (s === "failed") {
+          setRemoteActive(false);
+          recover();
+        } else if (s === "disconnected") {
+          // Transient — often recovers on its own; only surface if it persists.
+          setRemoteActive(false);
+        }
       };
       return pc;
+    }
+
+    // We have a live media path. Lock in "connected" and stop retrying.
+    function markConnected() {
+      stopReoffer();
+      setStatus("connected");
+    }
+
+    function stopReoffer() {
+      if (reofferTimer.current) {
+        clearInterval(reofferTimer.current);
+        reofferTimer.current = null;
+      }
+    }
+
+    // ICE failed: restart negotiation from the offerer with fresh candidates
+    // (e.g. forcing the TURN relay path). Non-offerer just waits for the new
+    // offer. If nothing recovers, the watchdog flips the UI to "failed".
+    function recover() {
+      const pc = pcRef.current;
+      if (!pc || cancelled) return;
+      // Skip if a (re)negotiation is already in flight — both connection and ICE
+      // state handlers can report failure for the same event.
+      if (pc.signalingState !== "stable") return;
+      if (isOffererRef.current) {
+        log("recover: restarting ICE + re-offering");
+        void makeOffer(true);
+      }
     }
 
     async function flushIce() {
@@ -203,18 +249,52 @@ export function ConsultationRoom({
       }
     }
 
-    async function makeOffer() {
+    async function makeOffer(iceRestart = false) {
       const pc = pcRef.current;
       if (!pc) return warn("makeOffer: no peer connection");
-      if (pc.signalingState !== "stable") {
+      // Only offer from a stable state, except an ICE-restart offer which is
+      // allowed to renegotiate an already-connected/failed session.
+      if (pc.signalingState !== "stable" && !iceRestart) {
         log("makeOffer skipped, signalingState:", pc.signalingState);
         return;
       }
-      log("makeOffer: creating offer…");
-      const offer = await pc.createOffer();
-      await pc.setLocalDescription(offer);
-      log("makeOffer: local description set, broadcasting offer");
-      send("signal", { from: clientId, kind: "offer", sdp: offer });
+      try {
+        log("makeOffer: creating offer…", iceRestart ? "(iceRestart)" : "");
+        const offer = await pc.createOffer(iceRestart ? { iceRestart: true } : undefined);
+        if (cancelled) return;
+        await pc.setLocalDescription(offer);
+        log("makeOffer: local description set, broadcasting offer");
+        send("signal", { from: clientId, kind: "offer", sdp: offer });
+      } catch (e) {
+        warn("makeOffer failed", e);
+      }
+    }
+
+    // The first offer can be lost if it races the peer's subscribe. While we're
+    // the offerer and not yet connected, nudge the negotiation periodically:
+    //  • have-local-offer → re-broadcast the same offer (it may have been lost),
+    //  • stable → the previous round didn't stick, so make a fresh offer.
+    // The watchdog gives up after CONNECT_TIMEOUT_MS if nothing connects.
+    function startReoffer() {
+      stopReoffer();
+      reofferTimer.current = setInterval(() => {
+        const pc = pcRef.current;
+        if (!pc || cancelled) return stopReoffer();
+        if (
+          pc.connectionState === "connected" ||
+          pc.iceConnectionState === "connected" ||
+          pc.iceConnectionState === "completed"
+        ) {
+          return stopReoffer();
+        }
+        if (pc.signalingState === "have-local-offer" && pc.localDescription) {
+          log("re-offer tick: re-broadcasting pending offer");
+          send("signal", { from: clientId, kind: "offer", sdp: pc.localDescription });
+        } else if (pc.signalingState === "stable") {
+          log("re-offer tick: fresh offer");
+          void makeOffer();
+        }
+      }, 4000);
     }
 
     async function onSignal(msg: Signal) {
@@ -222,7 +302,14 @@ export function ConsultationRoom({
       const pc = pcRef.current;
       if (!pc) return warn("onSignal: no peer connection for", msg.kind);
       log("↓ recv signal", msg.kind, "from", msg.from.slice(0, 6));
+      try {
       if (msg.kind === "offer") {
+        // Ignore a duplicate/renegotiation offer we can't cleanly apply (we only
+        // answer from stable — an answerer never has its own offer pending).
+        if (pc.signalingState !== "stable") {
+          log("  offer ignored (signalingState:", pc.signalingState, ")");
+          return;
+        }
         log("  applying remote offer, signalingState:", pc.signalingState);
         await pc.setRemoteDescription(msg.sdp);
         await flushIce();
@@ -230,15 +317,18 @@ export function ConsultationRoom({
         await pc.setLocalDescription(answer);
         log("  answer created + local set, broadcasting answer");
         send("signal", { from: clientId, kind: "answer", sdp: answer });
-        setStatus("connecting");
+        setStatus((s) => (s === "connected" ? s : "connecting"));
       } else if (msg.kind === "answer") {
-        if (!pc.currentRemoteDescription) {
+        // Apply an answer whenever we're waiting for one. Gating on
+        // currentRemoteDescription would drop the answer to an ICE-restart
+        // re-offer and leave the recovered call stuck.
+        if (pc.signalingState === "have-local-offer") {
           log("  applying remote answer");
           await pc.setRemoteDescription(msg.sdp);
+          await flushIce();
         } else {
-          log("  answer ignored (already have remote description)");
+          log("  answer ignored (signalingState:", pc.signalingState, ")");
         }
-        await flushIce();
       } else if (msg.kind === "ice") {
         if (pc.remoteDescription) {
           try {
@@ -252,6 +342,9 @@ export function ConsultationRoom({
           pendingIce.current.push(msg.candidate);
         }
       }
+      } catch (e) {
+        warn("onSignal error", msg.kind, e);
+      }
     }
 
     const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -263,16 +356,37 @@ export function ConsultationRoom({
     //  • Video unavailable (no camera / constraints) — fall back to audio-only.
     //  • NotAllowedError — permission denied; give up (recv-only).
     async function acquireMedia(): Promise<MediaStream | null> {
+      if (!navigator.mediaDevices?.getUserMedia) {
+        setMediaMsg(
+          "This browser can't access the camera. Video calls need a secure (https) context."
+        );
+        return null;
+      }
       for (let attempt = 1; attempt <= 4; attempt++) {
         try {
           log(`requesting camera + mic… (attempt ${attempt})`);
-          return await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+          const s = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+          setMediaMsg("");
+          return s;
         } catch (e) {
           const err = e as DOMException;
           warn(`getUserMedia failed (attempt ${attempt}):`, err.name, err.message);
           if (err.name === "NotAllowedError" || err.name === "SecurityError") {
-            warn("permission denied / insecure context — giving up on local media");
+            setMediaMsg(
+              "Camera & microphone access was blocked. Allow it in your browser's address bar, then Retry."
+            );
             return null;
+          }
+          if (err.name === "NotFoundError" || err.name === "OverconstrainedError") {
+            // No camera at all — try mic-only before giving up.
+            try {
+              const a = await navigator.mediaDevices.getUserMedia({ video: false, audio: true });
+              setMediaMsg("No camera found — joined with audio only.");
+              return a;
+            } catch {
+              setMediaMsg("No camera or microphone was found on this device.");
+              return null;
+            }
           }
           if (err.name === "NotReadableError" || err.name === "AbortError") {
             if (attempt < 4) {
@@ -283,9 +397,12 @@ export function ConsultationRoom({
           // Last resort: try audio-only (works even when the camera is taken).
           try {
             log("falling back to audio-only…");
-            return await navigator.mediaDevices.getUserMedia({ video: false, audio: true });
+            const a = await navigator.mediaDevices.getUserMedia({ video: false, audio: true });
+            setMediaMsg("Camera is in use by another app — joined with audio only.");
+            return a;
           } catch (e2) {
             warn("audio-only also failed:", (e2 as DOMException).name);
+            setMediaMsg("Couldn't access your camera or microphone. Close other apps and Retry.");
             return null;
           }
         }
@@ -303,7 +420,10 @@ export function ConsultationRoom({
       if (stream) {
         localStream.current = stream;
         log("got local media:", stream.getTracks().map((t) => `${t.kind}:${t.readyState}`));
-        if (localVideo.current) localVideo.current.srcObject = stream;
+        if (localVideo.current) {
+          localVideo.current.srcObject = stream;
+          void localVideo.current.play().catch(() => {});
+        }
       } else {
         warn("continuing without local media (recv-only) — you can still see/hear the other side");
         setMediaError(true);
@@ -340,6 +460,8 @@ export function ConsultationRoom({
         log("presence sync — peers in room:", ids.length, "others:", others.map((o) => o.slice(0, 6)));
         if (others.length === 0) {
           log("  alone in room, waiting for the other party");
+          stopReoffer();
+          isOffererRef.current = false;
           setStatus((s) => (s === "connected" ? "connected" : "waiting"));
           setRemoteActive(false);
           return;
@@ -347,10 +469,12 @@ export function ConsultationRoom({
         // Deterministic single offerer: the greater clientId initiates. This
         // avoids offer glare entirely for a 1:1 room.
         const shouldOffer = others.every((id) => clientId > id);
+        isOffererRef.current = shouldOffer;
         log("  other party present. I am the", shouldOffer ? "OFFERER" : "ANSWERER");
         if (shouldOffer) {
-          setStatus("connecting");
+          setStatus((s) => (s === "connected" ? s : "connecting"));
           void makeOffer();
+          startReoffer(); // resilient to lost offers / slow TURN
         } else {
           setStatus((s) => (s === "waiting" ? "connecting" : s));
         }
@@ -377,6 +501,8 @@ export function ConsultationRoom({
     return () => {
       log("room unmount — tearing down peer + channel");
       cancelled = true;
+      stopReoffer();
+      isOffererRef.current = false;
       pcRef.current?.close();
       pcRef.current = null;
       localStream.current?.getTracks().forEach((t) => t.stop());
@@ -384,9 +510,10 @@ export function ConsultationRoom({
       channelRef.current?.unsubscribe();
       channelRef.current = null;
       remoteStream.current = null;
+      pendingIce.current = [];
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [configured, roomId]);
+  }, [configured, roomId, retry]);
 
   function toggleMute() {
     const on = !muted;
@@ -427,14 +554,26 @@ export function ConsultationRoom({
     router.push(exitHref);
   }
 
+  // Tear down and re-establish the whole connection from scratch (bumping
+  // `retry` re-runs the connection effect). Used by the failure screen.
+  function retryConnection() {
+    setChannelError(false);
+    setRemoteEnded(false);
+    setRemoteActive(false);
+    setMediaError(false);
+    setNeedsAudioUnlock(false);
+    setStatus(configured ? "init" : "waiting");
+    setRetry((n) => n + 1);
+  }
+
   const mm = String(Math.floor(seconds / 60)).padStart(2, "0");
   const ss = String(seconds % 60).padStart(2, "0");
 
   const statusLabel =
     status === "connected"
       ? `Live · ${mm}:${ss}`
-      : channelError
-      ? "Connection problem"
+      : status === "failed" || channelError
+      ? "Connection failed"
       : status === "connecting"
       ? "Connecting…"
       : !configured
@@ -467,46 +606,89 @@ export function ConsultationRoom({
               ref={remoteVideo}
               autoPlay
               playsInline
-              onClick={() => remoteVideo.current?.play().catch(() => {})}
+              onClick={() =>
+                remoteVideo.current
+                  ?.play()
+                  .then(() => setNeedsAudioUnlock(false))
+                  .catch(() => setNeedsAudioUnlock(true))
+              }
               className={`h-full w-full object-cover ${remoteActive ? "" : "hidden"}`}
             />
-            {!remoteActive && (
-              <div className="animate-[rise_0.4s_ease] text-center">
-                <div className="mx-auto flex h-28 w-28 items-center justify-center rounded-full bg-white/5">
-                  {remoteEnded ? (
-                    <Icon name="phone-off" size={34} className="text-white/50" />
-                  ) : (
-                    <span className="h-3 w-3 animate-ping rounded-full bg-white/40" />
+            {remoteActive && needsAudioUnlock && (
+              <button
+                type="button"
+                onClick={() =>
+                  remoteVideo.current
+                    ?.play()
+                    .then(() => setNeedsAudioUnlock(false))
+                    .catch(() => {})
+                }
+                className="absolute inset-x-4 bottom-4 rounded-xl bg-black/70 px-4 py-3 text-sm text-white backdrop-blur-sm"
+              >
+                Tap to enable audio
+              </button>
+            )}
+            {!remoteActive && (() => {
+              const failed = status === "failed" || channelError;
+              const title = remoteEnded
+                ? "Call ended"
+                : failed
+                ? "Couldn't connect the call"
+                : status === "connecting"
+                ? "Connecting…"
+                : `Waiting for the ${other}`;
+              const body = remoteEnded
+                ? `The ${other} left the consultation. You can leave the room too.`
+                : channelError
+                ? "We couldn't reach the live signaling server. Check your internet connection and try again."
+                : failed
+                ? `We couldn't establish a live connection with the ${other}. This is usually a restrictive network or firewall. Try again, or switch to a different network.`
+                : !configured
+                ? "Live calls need the connected backend. Chat works locally."
+                : status === "connecting"
+                ? `Establishing a secure connection with the ${other}…`
+                : "The room is live — they'll appear here as soon as they join.";
+              return (
+                <div className="animate-[rise_0.4s_ease] max-w-md px-6 text-center">
+                  <div
+                    className={`mx-auto flex h-28 w-28 items-center justify-center rounded-full ${
+                      failed ? "bg-warning/15" : "bg-white/5"
+                    }`}
+                  >
+                    {remoteEnded ? (
+                      <Icon name="phone-off" size={34} className="text-white/50" />
+                    ) : failed ? (
+                      <Icon name="phone-off" size={34} className="text-warning" />
+                    ) : (
+                      <span className="h-3 w-3 animate-ping rounded-full bg-white/40" />
+                    )}
+                  </div>
+                  <p className="mt-4 font-display text-2xl font-light">{title}</p>
+                  <p className="mt-1 text-sm text-white/50">{body}</p>
+                  {mediaMsg && !remoteEnded && (
+                    <p className="mt-3 rounded-lg bg-white/5 px-3 py-2 text-xs text-white/60">
+                      {mediaMsg}
+                    </p>
+                  )}
+                  {failed && !remoteEnded && (
+                    <button
+                      onClick={retryConnection}
+                      className="mt-5 inline-flex items-center gap-2 rounded-full bg-ps px-6 py-2.5 text-sm font-semibold text-white transition hover:bg-ps-pressed active:scale-95"
+                    >
+                      <Icon name="phone" size={16} /> Retry connection
+                    </button>
+                  )}
+                  {remoteEnded && (
+                    <button
+                      onClick={endCall}
+                      className="mt-5 rounded-full bg-white/15 px-6 py-2.5 text-sm font-semibold text-white transition hover:bg-white/25"
+                    >
+                      Leave room
+                    </button>
                   )}
                 </div>
-                <p className="mt-4 font-display text-2xl font-light capitalize">
-                  {remoteEnded
-                    ? "Call ended"
-                    : channelError
-                    ? "Can't reach the room"
-                    : status === "connecting"
-                    ? "Connecting…"
-                    : `Waiting for the ${other}`}
-                </p>
-                <p className="text-sm text-white/50">
-                  {remoteEnded
-                    ? `The ${other} left the consultation. You can leave the room too.`
-                    : channelError
-                    ? "The live connection couldn't be established. Check your network and refresh to try again."
-                    : configured
-                    ? "The room is live — they'll appear here as soon as they join."
-                    : "Live calls need the connected backend. Chat works locally."}
-                </p>
-                {remoteEnded && (
-                  <button
-                    onClick={endCall}
-                    className="mt-5 rounded-full bg-white/15 px-6 py-2.5 text-sm font-semibold text-white transition hover:bg-white/25"
-                  >
-                    Leave room
-                  </button>
-                )}
-              </div>
-            )}
+              );
+            })()}
 
             {/* Self view */}
             <div className="absolute bottom-4 right-4 flex h-28 w-40 items-center justify-center overflow-hidden rounded-xl border border-white/15 bg-[#111]">

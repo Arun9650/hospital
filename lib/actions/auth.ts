@@ -68,14 +68,32 @@ const HOME_BY_ROLE: Record<string, string> = {
 };
 
 export async function signIn(formData: FormData) {
-  const email = String(formData.get("email") ?? "");
+  const email = String(formData.get("email") ?? "").trim();
   const password = String(formData.get("password") ?? "");
   const next = String(formData.get("next") ?? "");
+  const nextParam = next.startsWith("/") ? `&next=${encodeURIComponent(next)}` : "";
+
+  // Server-side validation so an empty submit gives clear feedback rather than a
+  // raw provider error.
+  if (!email || !password) {
+    redirect(`/login?error=${encodeURIComponent("Enter your email and password.")}${nextParam}`);
+  }
 
   if (isSupabaseConfigured) {
     const sb = await createServerSupabase();
     const { data, error } = await sb.auth.signInWithPassword({ email, password });
-    if (error) redirect(`/login?error=${encodeURIComponent(error.message)}`);
+    if (error) {
+      const msg = error.message.toLowerCase();
+      // "Email not confirmed" is the #1 lockout: surface it distinctly so the
+      // login page can offer a one-click resend instead of a dead-end error.
+      if (msg.includes("not confirmed") || msg.includes("confirm")) {
+        redirect(`/login?error=unconfirmed&email=${encodeURIComponent(email)}${nextParam}`);
+      }
+      const friendly = msg.includes("invalid")
+        ? "Incorrect email or password."
+        : error.message;
+      redirect(`/login?error=${encodeURIComponent(friendly)}${nextParam}`);
+    }
     const role = (data.user?.user_metadata?.role as string) ?? "patient";
     // Backfill the catalog row for doctors (covers email-confirmed sign-ups and
     // accounts created before doctors were listed automatically).
@@ -84,6 +102,17 @@ export async function signIn(formData: FormData) {
     redirect(HOME_BY_ROLE[role] ?? "/patient/dashboard");
   }
   redirect(next.startsWith("/") ? next : "/patient/dashboard");
+}
+
+/* Re-send the sign-up confirmation email (for users stuck on "Email not
+   confirmed"). No-op in mock mode. */
+export async function resendConfirmation(formData: FormData) {
+  const email = String(formData.get("email") ?? "").trim();
+  if (isSupabaseConfigured && email) {
+    const sb = await createServerSupabase();
+    await sb.auth.resend({ type: "signup", email });
+  }
+  redirect(`/login?check_email=${encodeURIComponent(email)}`);
 }
 
 export async function signUpPatient(formData: FormData) {

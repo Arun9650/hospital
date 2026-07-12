@@ -8,6 +8,7 @@
 
 import { isSupabaseConfigured } from "./supabase/config";
 import { createPublicClient } from "./supabase/public";
+import { getUserId } from "./auth";
 import * as mock from "./data";
 import type {
   Doctor,
@@ -253,6 +254,26 @@ export async function getPatientAppointments(userId?: string): Promise<Appointme
     return data.map(mapAppointment);
   } catch {
     return mock.appointments;
+  }
+}
+
+/**
+ * Resolve the catalog row for the currently signed-in doctor via their auth
+ * `profile_id`. This is the single source of truth for "who is this doctor",
+ * replacing the scattered hardcoded ids ("dr-anaya-rao") and the name-as-id bug
+ * that made a real doctor see someone else's data.
+ */
+export async function getCurrentDoctor(): Promise<Doctor | undefined> {
+  // Demo mode (no backend): mirror DoctorShell's stand-in doctor.
+  if (!isSupabaseConfigured) return mock.doctors.find((d) => d.id === "dr-anaya-rao");
+  const userId = await getUserId();
+  if (!userId) return undefined;
+  try {
+    const sb = createPublicClient();
+    const { data } = await sb.from("doctors").select("*").eq("profile_id", userId).maybeSingle();
+    return data ? mapDoctor(data) : undefined;
+  } catch {
+    return undefined;
   }
 }
 
