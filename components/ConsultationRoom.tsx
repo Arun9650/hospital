@@ -70,6 +70,7 @@ export function ConsultationRoom({
     "init" | "waiting" | "connecting" | "connected" | "ended" | "failed"
   >(configured ? "init" : "waiting");
   const [remoteActive, setRemoteActive] = useState(false);
+  const [remoteHasVideo, setRemoteHasVideo] = useState(false);
   const [remoteEnded, setRemoteEnded] = useState(false);
   const [mediaError, setMediaError] = useState(false);
   const [mediaMsg, setMediaMsg] = useState("");
@@ -116,7 +117,7 @@ export function ConsultationRoom({
     el.play()
       .then(() => setNeedsAudioUnlock(false))
       .catch(() => setNeedsAudioUnlock(true));
-  }, [remoteActive]);
+  }, [remoteActive, remoteHasVideo]);
 
   useEffect(() => {
     if (!configured) return;
@@ -190,23 +191,43 @@ export function ConsultationRoom({
           log("  added", e.track.kind, "to merged remote stream");
         }
         setRemoteActive(true);
+
+        const recomputeVideo = () =>
+          setRemoteHasVideo(
+            stream.getVideoTracks().some((t) => t.readyState === "live" && !t.muted)
+          );
+        recomputeVideo();
+        // The far side can turn its camera on/off mid-call — reflect that live.
+        e.track.onmute = recomputeVideo;
+        e.track.onunmute = recomputeVideo;
+        e.track.onended = () => {
+          recomputeVideo();
+          // If every remote track has ended, the peer's media is gone.
+          if (!stream.getTracks().some((t) => t.readyState === "live")) setRemoteActive(false);
+        };
+
+        // Re-attach on every track so a video track arriving *after* audio is
+        // actually rendered (some browsers don't pick up tracks added to an
+        // already-assigned srcObject), then (re)start playback.
         const el = remoteVideo.current;
-        if (el && el.srcObject !== stream) {
-          el.srcObject = stream;
-          log("  attached merged remote stream to <video>");
+        if (el) {
+          if (el.srcObject !== stream) el.srcObject = stream;
+          el.play()
+            .then(() => setNeedsAudioUnlock(false))
+            .catch(() => setNeedsAudioUnlock(true));
         }
       };
       pc.onconnectionstatechange = () => {
         const s = pc.connectionState;
         log("connectionState:", s);
         if (s === "connected") markConnected();
-        else if (s === "failed") {
-          setRemoteActive(false);
-          recover();
-        } else if (s === "disconnected") {
-          // Transient — often recovers on its own; only surface if it persists.
-          setRemoteActive(false);
-        }
+        else if (s === "failed") recover();
+        // NB: do NOT clear remoteActive on "disconnected"/"failed". Those states
+        // are transient on TURN-relayed calls and WebRTC usually recovers the
+        // media on its own; ontrack won't fire again for the existing tracks, so
+        // clearing it here would strand the remote panel on "Waiting…" while
+        // audio keeps playing. remoteActive is driven purely by track state
+        // (below) and cleared only when the peer truly leaves.
       };
       return pc;
     }
@@ -460,6 +481,7 @@ export function ConsultationRoom({
         log("↓ remote ended the call");
         setRemoteEnded(true);
         setRemoteActive(false);
+        setRemoteHasVideo(false);
         setStatus("ended");
       });
       channel.on("presence", { event: "sync" }, () => {
@@ -470,8 +492,17 @@ export function ConsultationRoom({
           log("  alone in room, waiting for the other party");
           stopReoffer();
           isOffererRef.current = false;
+          // Supabase presence can briefly flap. If the media path is still up,
+          // ignore it — clearing here would strand the remote video on
+          // "Waiting…". A genuine leave also ends the tracks (ontrack.onended
+          // clears remoteActive) and/or drops the connection.
+          const pc = pcRef.current;
+          if (pc && (pc.connectionState === "connected" || pc.iceConnectionState === "connected")) {
+            return;
+          }
           setStatus((s) => (s === "connected" ? "connected" : "waiting"));
           setRemoteActive(false);
+          setRemoteHasVideo(false);
           return;
         }
         // Deterministic single offerer: the greater clientId initiates. This
@@ -568,6 +599,7 @@ export function ConsultationRoom({
     setChannelError(false);
     setRemoteEnded(false);
     setRemoteActive(false);
+    setRemoteHasVideo(false);
     setMediaError(false);
     setNeedsAudioUnlock(false);
     setStatus(configured ? "init" : "waiting");
@@ -620,8 +652,22 @@ export function ConsultationRoom({
                   .then(() => setNeedsAudioUnlock(false))
                   .catch(() => setNeedsAudioUnlock(true))
               }
-              className={`h-full w-full object-cover ${remoteActive ? "" : "hidden"}`}
+              className={`h-full w-full object-cover ${
+                remoteActive && remoteHasVideo ? "" : "hidden"
+              }`}
             />
+            {/* Connected but the peer's camera is off/absent — audio still plays
+                through the (hidden) <video> above; show a placeholder, not
+                "Waiting…". */}
+            {remoteActive && !remoteHasVideo && (
+              <div className="animate-fade-in text-center">
+                <Avatar initials={other === "doctor" ? "DR" : "PT"} color="#334155" size={96} />
+                <p className="mt-4 font-display text-xl font-light capitalize">
+                  {other}&apos;s camera is off
+                </p>
+                <p className="text-sm text-white/50">You&apos;re still connected — audio is live.</p>
+              </div>
+            )}
             {remoteActive && needsAudioUnlock && (
               <button
                 type="button"
