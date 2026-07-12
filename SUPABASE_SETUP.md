@@ -57,9 +57,14 @@ Open the **SQL Editor** in Supabase and run, in order:
 5. `supabase/migrations/0005_push.sql` — `push_subscriptions` table for Web Push.
 6. `supabase/migrations/0006_notifications_realtime.sql` — stream notifications live.
 7. `supabase/migrations/0007_appointment_booking.sql` — atomic booking function + notification timestamps/relations.
-8. `supabase/seed.sql` — demo specialties, doctors, reviews, appointments, etc.
-9. `supabase/seed_chat.sql` — demo chat threads & messages.
-10. `supabase/seed_patients.sql` — demo patient records for Dr. Anaya Rao's panel.
+8. `supabase/migrations/0008_storage.sql` — `consultation-files` Storage bucket + policies for in-call file sharing.
+9. `supabase/seed.sql` — demo specialties, doctors, reviews, appointments, etc.
+10. `supabase/seed_chat.sql` — demo chat threads & messages.
+11. `supabase/seed_patients.sql` — demo patient records for Dr. Anaya Rao's panel.
+
+> **In-call file sharing:** `0008_storage.sql` creates a **public** `consultation-files`
+> bucket so a shared link works for both parties. For real medical files, make the
+> bucket private and switch the upload code to `createSignedUrl()` before production.
 
 (Or, with the Supabase CLI: `supabase db push` then run the seed files.)
 

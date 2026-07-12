@@ -6,6 +6,8 @@ import type { RealtimeChannel } from "@supabase/supabase-js";
 import { Avatar } from "@/components/ui";
 import { Icon } from "@/components/Icon";
 import { Logo } from "@/components/Logo";
+import { useToast } from "@/components/Toast";
+import { CallPrescriptionPanel } from "@/components/CallPrescriptionPanel";
 import { createClient } from "@/lib/supabase/client";
 import { updateAppointmentStatus } from "@/lib/actions/data";
 import { getIceServers, fetchIceServers } from "@/lib/webrtc/ice";
@@ -17,7 +19,15 @@ export type RoomUser = {
   color: string;
 };
 
-type ChatLine = { id: string; from: "patient" | "doctor"; name: string; text: string; time: string };
+type ChatFile = { name: string; url: string; size?: number };
+type ChatLine = {
+  id: string;
+  from: "patient" | "doctor";
+  name: string;
+  text: string;
+  time: string;
+  file?: ChatFile;
+};
 
 type Signal =
   | { from: string; kind: "offer" | "answer"; sdp: RTCSessionDescriptionInit }
@@ -52,6 +62,7 @@ export function ConsultationRoom({
   configured: boolean;
 }) {
   const router = useRouter();
+  const { show: showToast } = useToast();
   const clientId = useMemo(() => crypto.randomUUID(), []);
 
   const localVideo = useRef<HTMLVideoElement>(null);
@@ -84,6 +95,10 @@ export function ConsultationRoom({
   const [retry, setRetry] = useState(0);
   // Browsers often block remote audio until a user gesture — surface a tap target.
   const [needsAudioUnlock, setNeedsAudioUnlock] = useState(false);
+  // Sidebar: chat vs the doctor's in-call prescription pad.
+  const [panel, setPanel] = useState<"chat" | "rx">("chat");
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const other = me.role === "patient" ? "doctor" : "patient";
 
@@ -567,20 +582,60 @@ export function ConsultationRoom({
     localStream.current?.getVideoTracks().forEach((t) => (t.enabled = !off));
   }
 
+  // Add a line locally and broadcast it to the other party (dedup by id).
+  function broadcastLine(line: ChatLine) {
+    setChat((c) => (c.some((m) => m.id === line.id) ? c : [...c, line]));
+    channelRef.current?.send({ type: "broadcast", event: "chat", payload: line });
+  }
+
+  function newLine(fields: Partial<ChatLine>): ChatLine {
+    return {
+      id: `${clientId}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      from: me.role,
+      name: me.name,
+      text: "",
+      time: clock(),
+      ...fields,
+    };
+  }
+
   function sendChat(e: React.FormEvent) {
     e.preventDefault();
     const text = draft.trim();
     if (!text) return;
-    const line: ChatLine = {
-      id: `${clientId}-${Date.now()}`,
-      from: me.role,
-      name: me.name,
-      text,
-      time: clock(),
-    };
-    setChat((c) => [...c, line]);
-    channelRef.current?.send({ type: "broadcast", event: "chat", payload: line });
+    broadcastLine(newLine({ text }));
     setDraft("");
+  }
+
+  // Upload a shared file to Storage, then post a download link into the chat so
+  // both parties get it (and it persists after the call).
+  async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // allow re-selecting the same file
+    if (!file) return;
+    if (!configured) {
+      showToast("File sharing needs the connected backend.", "error");
+      return;
+    }
+    if (file.size > 15 * 1024 * 1024) {
+      showToast("File is too large (max 15 MB).", "error");
+      return;
+    }
+    setUploading(true);
+    try {
+      const sb = createClient();
+      const safeName = file.name.replace(/[^\w.\-]+/g, "_");
+      const path = `${roomId}/${clientId.slice(0, 8)}-${Date.now()}-${safeName}`;
+      const { error } = await sb.storage.from("consultation-files").upload(path, file);
+      if (error) throw error;
+      const { data } = sb.storage.from("consultation-files").getPublicUrl(path);
+      broadcastLine(newLine({ file: { name: file.name, url: data.publicUrl, size: file.size } }));
+    } catch (err) {
+      console.error("[call] file upload failed", err);
+      showToast("Couldn't upload the file. Please try again.", "error");
+    } finally {
+      setUploading(false);
+    }
   }
 
   function endCall() {
@@ -777,49 +832,121 @@ export function ConsultationRoom({
           </div>
         </div>
 
-        {/* Chat */}
+        {/* Sidebar: chat (+ file sharing) and, for the doctor, a prescription pad */}
         <aside className="flex min-h-[44dvh] w-full flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#0d0d0f] lg:min-h-0 lg:w-96">
-          <div className="border-b border-white/10 px-4 py-3 text-sm font-medium">Chat</div>
-          <div ref={chatRef} className="flex-1 space-y-3 overflow-y-auto p-4">
-            {chat.length === 0 && (
-              <p className="text-center text-xs text-white/40">
-                Messages sent here are shared with the {other} in real time.
-              </p>
-            )}
-            {chat.map((c) => {
-              const mine = c.from === me.role;
-              return (
-                <div key={c.id} className={`flex ${mine ? "justify-end" : "justify-start"}`}>
-                  <div
-                    className={`max-w-[80%] break-words rounded-2xl px-4 py-2 text-sm ${
-                      mine ? "bg-ps text-white" : "bg-white/10 text-white/90"
-                    }`}
-                  >
-                    {!mine && <p className="mb-0.5 text-[11px] text-white/50">{c.name}</p>}
-                    {c.text}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-          <form onSubmit={sendChat} className="flex items-center gap-2 border-t border-white/10 p-3">
-            <input
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              placeholder="Type a message…"
-              className="min-w-0 flex-1 rounded-full bg-white/10 px-4 py-2.5 text-sm text-white outline-none placeholder:text-white/40"
+          {me.role === "doctor" ? (
+            <div className="flex border-b border-white/10">
+              <Tab active={panel === "chat"} onClick={() => setPanel("chat")}>Chat</Tab>
+              <Tab active={panel === "rx"} onClick={() => setPanel("rx")}>Prescription</Tab>
+            </div>
+          ) : (
+            <div className="border-b border-white/10 px-4 py-3 text-sm font-medium">Chat</div>
+          )}
+
+          {panel === "rx" && me.role === "doctor" ? (
+            <CallPrescriptionPanel
+              appointmentId={roomId}
+              onSent={(summary) => {
+                broadcastLine(
+                  newLine({
+                    text: `📄 Sent you a prescription${summary ? ` — ${summary}` : ""}. Open the Prescriptions tab to view it.`,
+                  })
+                );
+                setPanel("chat");
+              }}
             />
-            <button
-              type="submit"
-              aria-label="Send message"
-              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-ps text-white transition-transform hover:scale-105 active:scale-95"
-            >
-              <Icon name="send" size={16} />
-            </button>
-          </form>
+          ) : (
+            <>
+              <div ref={chatRef} className="flex-1 space-y-3 overflow-y-auto p-4">
+                {chat.length === 0 && (
+                  <p className="text-center text-xs text-white/40">
+                    Messages and files shared here go to the {other} in real time.
+                  </p>
+                )}
+                {chat.map((c) => {
+                  const mine = c.from === me.role;
+                  return (
+                    <div key={c.id} className={`flex ${mine ? "justify-end" : "justify-start"}`}>
+                      <div
+                        className={`max-w-[80%] break-words rounded-2xl px-4 py-2 text-sm ${
+                          mine ? "bg-ps text-white" : "bg-white/10 text-white/90"
+                        }`}
+                      >
+                        {!mine && <p className="mb-0.5 text-[11px] text-white/50">{c.name}</p>}
+                        {c.file ? (
+                          <a
+                            href={c.file.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-center gap-2 underline decoration-white/40 underline-offset-2"
+                          >
+                            <span className="text-base">📎</span>
+                            <span className="truncate">{c.file.name}</span>
+                          </a>
+                        ) : (
+                          c.text
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              <form onSubmit={sendChat} className="flex items-center gap-2 border-t border-white/10 p-3">
+                <input ref={fileInputRef} type="file" className="hidden" onChange={handleFile} />
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploading || !configured}
+                  title="Share a file"
+                  aria-label="Share a file"
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white/10 text-white transition hover:bg-white/20 disabled:opacity-50"
+                >
+                  {uploading ? (
+                    <span className="spinner" style={{ width: 16, height: 16 }} />
+                  ) : (
+                    <span className="text-lg">📎</span>
+                  )}
+                </button>
+                <input
+                  value={draft}
+                  onChange={(e) => setDraft(e.target.value)}
+                  placeholder="Type a message…"
+                  className="min-w-0 flex-1 rounded-full bg-white/10 px-4 py-2.5 text-sm text-white outline-none placeholder:text-white/40"
+                />
+                <button
+                  type="submit"
+                  aria-label="Send message"
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-ps text-white transition-transform hover:scale-105 active:scale-95"
+                >
+                  <Icon name="send" size={16} />
+                </button>
+              </form>
+            </>
+          )}
         </aside>
       </div>
     </div>
+  );
+}
+
+function Tab({
+  children,
+  active,
+  onClick,
+}: {
+  children: React.ReactNode;
+  active?: boolean;
+  onClick?: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`flex-1 px-4 py-3 text-sm font-medium transition-colors ${
+        active ? "bg-white/10 text-white" : "text-white/50 hover:text-white"
+      }`}
+    >
+      {children}
+    </button>
   );
 }
 

@@ -366,6 +366,71 @@ export async function issuePrescription(input: {
   }
 }
 
+/* Doctor issues a prescription DURING a consultation. Resolves the patient (and
+   the doctor's name/specialty) from the appointment so the call room only needs
+   to pass the appointment id + the clinical fields. Links the prescription to
+   the appointment and notifies the patient. */
+export async function issuePrescriptionForAppointment(
+  appointmentId: string,
+  input: {
+    diagnosis: string;
+    medicines: { name: string; dose: string; frequency: string; duration: string }[];
+    tests: string[];
+    notes: string;
+  }
+): Promise<Result> {
+  if (!isSupabaseConfigured) return { ok: true };
+  try {
+    const sb = await createServerSupabase();
+    const { data: appt } = await sb
+      .from("appointments")
+      .select("patient_id, doctor_name, specialty")
+      .eq("id", appointmentId)
+      .maybeSingle();
+    if (!appt) {
+      console.warn("[prescription] appointment not found", { appointmentId });
+      return { ok: false };
+    }
+
+    const doctorName = (appt.doctor_name as string) || "Your doctor";
+    const { error } = await sb.from("prescriptions").insert({
+      appointment_id: appointmentId,
+      patient_id: (appt.patient_id as string) ?? null,
+      doctor_name: doctorName,
+      specialty: (appt.specialty as string) ?? "",
+      date_label: new Date().toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+      }),
+      diagnosis: input.diagnosis,
+      medicines: input.medicines,
+      tests: input.tests,
+      notes: input.notes,
+    });
+    if (error) {
+      console.error("[prescription] insert failed", { message: error.message, code: error.code });
+      return { ok: false };
+    }
+
+    if (appt.patient_id) {
+      await notify(sb, {
+        userId: appt.patient_id as string,
+        title: "New prescription available",
+        body: `${doctorName} issued a prescription${
+          input.diagnosis ? ` for ${input.diagnosis}` : ""
+        }.`,
+        kind: "prescription",
+        url: "/patient/prescriptions",
+      });
+    }
+    return { ok: true };
+  } catch (err) {
+    console.error("[prescription] unexpected error", err);
+    return { ok: false };
+  }
+}
+
 /* Doctor saves weekly availability (upsert per day). */
 export async function saveAvailability(
   doctorId: string,
