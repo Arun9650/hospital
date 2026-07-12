@@ -192,18 +192,20 @@ export function ConsultationRoom({
         }
         setRemoteActive(true);
 
+        // "Has video" = a live video track exists. Deliberately NOT gated on
+        // track.muted: a freshly-received remote video track is muted until the
+        // first frame decodes, and onunmute timing is unreliable — gating on it
+        // would wrongly hide working video behind a "camera off" placeholder.
         const recomputeVideo = () =>
-          setRemoteHasVideo(
-            stream.getVideoTracks().some((t) => t.readyState === "live" && !t.muted)
-          );
+          setRemoteHasVideo(stream.getVideoTracks().some((t) => t.readyState === "live"));
         recomputeVideo();
-        // The far side can turn its camera on/off mid-call — reflect that live.
-        e.track.onmute = recomputeVideo;
-        e.track.onunmute = recomputeVideo;
         e.track.onended = () => {
           recomputeVideo();
           // If every remote track has ended, the peer's media is gone.
-          if (!stream.getTracks().some((t) => t.readyState === "live")) setRemoteActive(false);
+          if (!stream.getTracks().some((t) => t.readyState === "live")) {
+            setRemoteActive(false);
+            setRemoteHasVideo(false);
+          }
         };
 
         // Re-attach on every track so a video track arriving *after* audio is
@@ -652,15 +654,13 @@ export function ConsultationRoom({
                   .then(() => setNeedsAudioUnlock(false))
                   .catch(() => setNeedsAudioUnlock(true))
               }
-              className={`h-full w-full object-cover ${
-                remoteActive && remoteHasVideo ? "" : "hidden"
-              }`}
+              className={`h-full w-full object-cover ${remoteActive ? "" : "hidden"}`}
             />
-            {/* Connected but the peer's camera is off/absent — audio still plays
-                through the (hidden) <video> above; show a placeholder, not
-                "Waiting…". */}
+            {/* Connected but the peer has no video track — audio still plays
+                through the <video> above; overlay a placeholder rather than a
+                black frame. Absolute so it covers the (empty) video element. */}
             {remoteActive && !remoteHasVideo && (
-              <div className="animate-fade-in text-center">
+              <div className="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-br from-[#0a2540] to-[#04101f] text-center">
                 <Avatar initials={other === "doctor" ? "DR" : "PT"} color="#334155" size={96} />
                 <p className="mt-4 font-display text-xl font-light capitalize">
                   {other}&apos;s camera is off
