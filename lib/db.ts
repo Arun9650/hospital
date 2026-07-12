@@ -9,6 +9,7 @@
 import { isSupabaseConfigured } from "./supabase/config";
 import { createPublicClient } from "./supabase/public";
 import { getUserId } from "./auth";
+import { relativeTime, shortTime } from "./time";
 import * as mock from "./data";
 import type {
   Doctor,
@@ -128,38 +129,24 @@ function mapPatient(r: Row): Patient {
 }
 
 function mapNotification(r: Row): NotificationItem {
+  const createdAt = r.created_at ? String(r.created_at) : undefined;
   return {
     id: String(r.id),
     title: String(r.title ?? ""),
     body: String(r.body ?? ""),
-    time: String(r.time_label ?? ""),
+    // Prefer the real timestamp; fall back to the legacy time_label only when a
+    // row predates the created_at column.
+    time: createdAt ? relativeTime(createdAt) : String(r.time_label ?? ""),
+    createdAt,
     kind: (r.kind as NotificationItem["kind"]) ?? "system",
     unread: Boolean(r.unread),
+    appointmentId: r.appointment_id ? String(r.appointment_id) : undefined,
   };
 }
 
-/* Short clock label for a message timestamp, e.g. "9:02 AM". */
-export function shortTime(ts: unknown): string {
-  const d = new Date(String(ts ?? ""));
-  if (isNaN(d.getTime())) return "";
-  return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
-}
-
-/* Relative "last active" label for a thread, e.g. "2m ago" / "Yesterday". */
-export function relativeTime(ts: unknown): string {
-  const d = new Date(String(ts ?? ""));
-  if (isNaN(d.getTime())) return "";
-  const secs = Math.round((Date.now() - d.getTime()) / 1000);
-  if (secs < 45) return "just now";
-  const mins = Math.round(secs / 60);
-  if (mins < 60) return `${mins}m ago`;
-  const hours = Math.round(mins / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.round(hours / 24);
-  if (days === 1) return "Yesterday";
-  if (days < 7) return `${days}d ago`;
-  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-}
+// Time helpers moved to lib/time.ts (client-safe). Re-exported here so existing
+// server imports (`@/lib/db`) keep working.
+export { relativeTime, shortTime };
 
 function mapChatThread(t: Row, msgs: Row[], perspective: "patient" | "doctor"): ChatThread {
   const doc = (t.doctor as Row) ?? {};

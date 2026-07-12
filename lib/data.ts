@@ -112,6 +112,10 @@ export type NotificationItem = {
   time: string;
   kind: "appointment" | "prescription" | "payment" | "system";
   unread: boolean;
+  /** UTC ISO timestamp; the UI recomputes the relative "time" label from this. */
+  createdAt?: string;
+  /** The appointment this notification is about, when applicable. */
+  appointmentId?: string;
 };
 
 /* ---- Specialties ------------------------------------------------------ */

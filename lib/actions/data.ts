@@ -2,7 +2,7 @@
 
 import { createServerSupabase } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
-import { shortTime } from "@/lib/db";
+import { shortTime } from "@/lib/time";
 import { sendPushToUser } from "@/lib/push/send";
 
 type Result = { ok: boolean };
@@ -64,7 +64,31 @@ export async function createNotification(input: {
   }
 }
 
-/* Booking → create an appointment row for the signed-in patient. */
+/* Mark notifications as read (records read_at + updated_at). With `ids`, marks
+   just those; otherwise marks all of the current user's unread notifications
+   (plus the global demo rows they can see). No-op in mock mode. */
+export async function markNotificationsRead(ids?: string[]): Promise<Result> {
+  if (!isSupabaseConfigured) return { ok: true };
+  try {
+    const sb = await createServerSupabase();
+    const patch = { unread: false, read_at: new Date().toISOString() };
+    if (ids?.length) {
+      await sb.from("notifications").update(patch).in("id", ids);
+    } else {
+      const {
+        data: { user },
+      } = await sb.auth.getUser();
+      const filter = user?.id ? `user_id.eq.${user.id},user_id.is.null` : `user_id.is.null`;
+      await sb.from("notifications").update(patch).or(filter).eq("unread", true);
+    }
+    return { ok: true };
+  } catch {
+    return { ok: false };
+  }
+}
+
+/* Booking → atomically create the appointment AND the doctor's notification.
+   Returns the appointment id on success, or a human-readable error. */
 export async function createAppointment(input: {
   doctorId: string;
   doctorName: string;
@@ -74,7 +98,7 @@ export async function createAppointment(input: {
   time: string;
   fee: number;
   reason: string;
-}): Promise<Result & { id?: string }> {
+}): Promise<Result & { id?: string; error?: string }> {
   if (!isSupabaseConfigured) return { ok: true };
   try {
     const sb = await createServerSupabase();
@@ -82,63 +106,80 @@ export async function createAppointment(input: {
       data: { user },
     } = await sb.auth.getUser();
 
-    // Reuse an existing active booking for the same patient/doctor/slot instead
-    // of piling up duplicates. Duplicate rows are indistinguishable, so the
-    // patient and doctor can end up opening different /consultation/<id> rooms
-    // and never meet. One slot = one appointment = one shared room.
-    if (user?.id) {
-      const { data: existing } = await sb
-        .from("appointments")
-        .select("id")
-        .eq("patient_id", user.id)
-        .eq("doctor_id", input.doctorId)
-        .eq("date_label", input.date)
-        .eq("time_label", input.time)
-        .eq("status", "Upcoming")
-        .limit(1)
-        .maybeSingle();
-      if (existing) return { ok: true, id: String(existing.id) };
+    // A real booking requires an authenticated patient — never persist an
+    // anonymous/orphan appointment.
+    if (!user?.id) return { ok: false, error: "Please sign in to book an appointment." };
+
+    // Validate the payload before touching the database.
+    if (!input.doctorId || !input.date || !input.time || !input.mode) {
+      return { ok: false, error: "Missing appointment details. Pick a slot and try again." };
     }
 
-    const patientName = (user?.user_metadata?.full_name as string) || "You";
-    const { data, error } = await sb
+    // Idempotency / duplicate-click guard: reuse an existing pending or upcoming
+    // booking for the same patient/doctor/slot rather than creating a second one
+    // (which would also fire a duplicate notification).
+    const { data: existing } = await sb
       .from("appointments")
-      .insert({
-        doctor_id: input.doctorId,
-        doctor_name: input.doctorName,
-        specialty: input.specialty,
-        patient_id: user?.id ?? null,
-        patient_name: patientName,
-        date_label: input.date,
-        time_label: input.time,
-        mode: input.mode,
-        status: "Upcoming",
-        fee: input.fee,
-        reason: input.reason || "General consultation",
-      })
       .select("id")
-      .single();
-    if (error) return { ok: false };
+      .eq("patient_id", user.id)
+      .eq("doctor_id", input.doctorId)
+      .eq("date_label", input.date)
+      .eq("time_label", input.time)
+      .in("status", ["Pending", "Upcoming"])
+      .limit(1)
+      .maybeSingle();
+    if (existing) return { ok: true, id: String(existing.id) };
 
-    // Notify the doctor of the new booking. Route it to the doctor's auth
-    // profile when they have one; otherwise leave it global (seed catalog
-    // doctors have no linked account) so it still surfaces in the demo.
+    const meta = user.user_metadata ?? {};
+    // Store the patient's real name so the appointment shows up in the doctor's
+    // list. ("You" is reserved for the patient's own seeded demo rows, which the
+    // doctor query filters out — using it here would hide the booking.)
+    const patientName =
+      (meta.full_name as string) ||
+      (user.email ? user.email.split("@")[0] : "") ||
+      "Patient";
+
+    // Atomic: appointment + notification inserted in one Postgres transaction.
+    // Either both persist or neither — no orphan notification — and the booking
+    // is only reported "ok" once the appointment row is actually saved.
+    const { data, error } = await sb.rpc("book_appointment", {
+      p_doctor_id: input.doctorId,
+      p_doctor_name: input.doctorName,
+      p_specialty: input.specialty,
+      p_patient_id: user.id,
+      p_patient_name: patientName,
+      p_date_label: input.date,
+      p_time_label: input.time,
+      p_mode: input.mode,
+      p_fee: input.fee,
+      p_reason: input.reason,
+    });
+    const row = Array.isArray(data) ? data[0] : data;
+    if (error || !row?.appointment_id) {
+      return { ok: false, error: "Couldn't save your appointment. Please try again." };
+    }
+    const appointmentId = String(row.appointment_id);
+
+    // The in-app notification already streamed to the doctor via Realtime the
+    // moment the transaction committed. Web Push is the only post-commit side
+    // effect left, and it targets the doctor's linked account when they have one.
     const { data: doc } = await sb
       .from("doctors")
       .select("profile_id")
       .eq("id", input.doctorId)
       .maybeSingle();
-    await notify(sb, {
-      userId: (doc?.profile_id as string) ?? null,
-      title: "New appointment request",
-      body: `${patientName} booked a ${input.mode} consultation for ${input.date} at ${input.time}.`,
-      kind: "appointment",
-      url: "/doctor/notifications",
-    });
+    if (doc?.profile_id) {
+      await sendPushToUser(String(doc.profile_id), {
+        title: "New appointment request",
+        body: `${patientName} booked a ${input.mode} consultation for ${input.date} at ${input.time}.`,
+        url: "/doctor/notifications",
+        tag: "appointment",
+      });
+    }
 
-    return { ok: true, id: String(data.id) };
+    return { ok: true, id: appointmentId };
   } catch {
-    return { ok: false };
+    return { ok: false, error: "Something went wrong while booking. Please try again." };
   }
 }
 

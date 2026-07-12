@@ -30,6 +30,7 @@ export function BookingWizardClient({ doctor }: { doctor: Doctor }) {
   const [reason, setReason] = useState("");
   const [done, setDone] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [apptId, setApptId] = useState<string | undefined>();
 
   const canNext =
@@ -40,6 +41,7 @@ export function BookingWizardClient({ doctor }: { doctor: Doctor }) {
 
   async function handleConfirm() {
     setSaving(true);
+    setError(null);
     const res = await createAppointment({
       doctorId: doctor.id,
       doctorName: doctor.name,
@@ -50,8 +52,14 @@ export function BookingWizardClient({ doctor }: { doctor: Doctor }) {
       fee: doctor.fee,
       reason,
     });
-    setApptId(res.id);
     setSaving(false);
+    // Only show the confirmation once the appointment is actually saved. A
+    // failed booking must NOT report success (and never created a notification).
+    if (!res.ok) {
+      setError(res.error || "We couldn't complete your booking. Please try again.");
+      return;
+    }
+    setApptId(res.id);
     setDone(true);
   }
 
@@ -195,6 +203,12 @@ export function BookingWizardClient({ doctor }: { doctor: Doctor }) {
                 🔒 Payments are encrypted. You won’t be charged until the doctor confirms.
               </div>
             </div>
+          )}
+
+          {error && (
+            <p className="mt-6 rounded-lg bg-[#fbe7ea] px-4 py-3 text-sm text-warning" role="alert">
+              {error}
+            </p>
           )}
 
           {/* Nav buttons */}

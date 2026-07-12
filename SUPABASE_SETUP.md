@@ -56,9 +56,10 @@ Open the **SQL Editor** in Supabase and run, in order:
 4. `supabase/migrations/0004_notifications.sql` — timestamp so new notifications sort first.
 5. `supabase/migrations/0005_push.sql` — `push_subscriptions` table for Web Push.
 6. `supabase/migrations/0006_notifications_realtime.sql` — stream notifications live.
-7. `supabase/seed.sql` — demo specialties, doctors, reviews, appointments, etc.
-8. `supabase/seed_chat.sql` — demo chat threads & messages.
-9. `supabase/seed_patients.sql` — demo patient records for Dr. Anaya Rao's panel.
+7. `supabase/migrations/0007_appointment_booking.sql` — atomic booking function + notification timestamps/relations.
+8. `supabase/seed.sql` — demo specialties, doctors, reviews, appointments, etc.
+9. `supabase/seed_chat.sql` — demo chat threads & messages.
+10. `supabase/seed_patients.sql` — demo patient records for Dr. Anaya Rao's panel.
 
 (Or, with the Supabase CLI: `supabase db push` then run the seed files.)
 
