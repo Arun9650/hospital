@@ -154,11 +154,30 @@ export async function createAppointment(input: {
       p_fee: input.fee,
       p_reason: input.reason,
     });
+    if (error) {
+      // Surface the real Postgres/PostgREST cause so booking failures are
+      // diagnosable from the server log. The most common one is PGRST202
+      // "Could not find function public.book_appointment" → migration 0007 isn't
+      // applied, or the API schema cache needs `notify pgrst, 'reload schema';`.
+      console.error("[booking] book_appointment RPC failed", {
+        code: error.code,
+        message: error.message,
+        details: error.details,
+        hint: error.hint,
+      });
+      return { ok: false, error: "Couldn't save your appointment. Please try again." };
+    }
     const row = Array.isArray(data) ? data[0] : data;
-    if (error || !row?.appointment_id) {
+    if (!row?.appointment_id) {
+      console.error("[booking] book_appointment returned no appointment id", { data });
       return { ok: false, error: "Couldn't save your appointment. Please try again." };
     }
     const appointmentId = String(row.appointment_id);
+    console.log("[booking] appointment created", {
+      appointmentId,
+      doctorId: input.doctorId,
+      patient: patientName,
+    });
 
     // The in-app notification already streamed to the doctor via Realtime the
     // moment the transaction committed. Web Push is the only post-commit side
@@ -179,7 +198,8 @@ export async function createAppointment(input: {
     }
 
     return { ok: true, id: appointmentId };
-  } catch {
+  } catch (err) {
+    console.error("[booking] unexpected error", err);
     return { ok: false, error: "Something went wrong while booking. Please try again." };
   }
 }
