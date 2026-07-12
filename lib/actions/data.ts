@@ -108,10 +108,19 @@ export async function createAppointment(input: {
 
     // A real booking requires an authenticated patient — never persist an
     // anonymous/orphan appointment.
-    if (!user?.id) return { ok: false, error: "Please sign in to book an appointment." };
+    if (!user?.id) {
+      console.warn("[booking] rejected: no authenticated patient (check session/cookies)");
+      return { ok: false, error: "Please sign in to book an appointment." };
+    }
 
     // Validate the payload before touching the database.
     if (!input.doctorId || !input.date || !input.time || !input.mode) {
+      console.warn("[booking] rejected: missing fields", {
+        doctorId: input.doctorId,
+        date: input.date,
+        time: input.time,
+        mode: input.mode,
+      });
       return { ok: false, error: "Missing appointment details. Pick a slot and try again." };
     }
 
@@ -128,7 +137,13 @@ export async function createAppointment(input: {
       .in("status", ["Pending", "Upcoming"])
       .limit(1)
       .maybeSingle();
-    if (existing) return { ok: true, id: String(existing.id) };
+    if (existing) {
+      console.log(
+        "[booking] reused existing appointment for this slot — NO new appointment or notification created",
+        { appointmentId: String(existing.id), doctorId: input.doctorId, slot: `${input.date} ${input.time}` }
+      );
+      return { ok: true, id: String(existing.id) };
+    }
 
     const meta = user.user_metadata ?? {};
     // Store the patient's real name so the appointment shows up in the doctor's
