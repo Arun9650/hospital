@@ -24,6 +24,7 @@ export type IconName =
   | "clock"
   | "star"
   | "arrow-left"
+  | "download"
   | "logout";
 
 /* Path data (24×24 viewBox, stroke icons). */
@@ -49,6 +50,7 @@ const paths: Record<IconName, string> = {
   clock: "M12 21a9 9 0 100-18 9 9 0 000 18zM12 7v5l3 2",
   star: "M12 2l3.1 6.3 6.9 1-5 4.9 1.2 6.8L12 17.8 5.8 21l1.2-6.8-5-4.9 6.9-1z",
   "arrow-left": "M19 12H5M12 19l-7-7 7-7",
+  download: "M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3",
   logout: "M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9",
 };
 

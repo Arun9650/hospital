@@ -10,7 +10,9 @@ import { useToast } from "@/components/Toast";
 import { CallPrescriptionPanel } from "@/components/CallPrescriptionPanel";
 import { createClient } from "@/lib/supabase/client";
 import { updateAppointmentStatus } from "@/lib/actions/data";
+import { downloadPrescriptionPdf } from "@/lib/prescriptionPdf";
 import { getIceServers, fetchIceServers } from "@/lib/webrtc/ice";
+import type { Prescription } from "@/lib/data";
 
 export type RoomUser = {
   role: "patient" | "doctor";
@@ -27,6 +29,9 @@ type ChatLine = {
   text: string;
   time: string;
   file?: ChatFile;
+  // A prescription the doctor issued mid-call; carries the full structured Rx so
+  // the patient can download the PDF straight from the chat, no reload needed.
+  rx?: Prescription;
 };
 
 type Signal =
@@ -91,6 +96,8 @@ export function ConsultationRoom({
   const [seconds, setSeconds] = useState(0);
   const [chat, setChat] = useState<ChatLine[]>([]);
   const [draft, setDraft] = useState("");
+  // Chat-line id whose prescription PDF is currently being generated (spinner).
+  const [rxBusy, setRxBusy] = useState<string | null>(null);
   // Bumping `retry` fully tears down and re-runs the connection effect.
   const [retry, setRetry] = useState(0);
   // Browsers often block remote audio until a user gesture — surface a tap target.
@@ -638,6 +645,21 @@ export function ConsultationRoom({
     }
   }
 
+  // Download a prescription shared in the call as a PDF. The patient is the
+  // signed-in user here, so stamp their own name on the document.
+  async function downloadRx(line: ChatLine) {
+    if (!line.rx) return;
+    setRxBusy(line.id);
+    try {
+      await downloadPrescriptionPdf(line.rx, me.role === "patient" ? me.name : undefined);
+    } catch (err) {
+      console.error("[call] prescription PDF failed", err);
+      showToast("Couldn't generate the PDF. Please try again.", "error");
+    } finally {
+      setRxBusy(null);
+    }
+  }
+
   function endCall() {
     // Let the other party know so their screen doesn't sit on "waiting".
     channelRef.current?.send({ type: "broadcast", event: "end", payload: { from: clientId } });
@@ -846,10 +868,12 @@ export function ConsultationRoom({
           {panel === "rx" && me.role === "doctor" ? (
             <CallPrescriptionPanel
               appointmentId={roomId}
-              onSent={(summary) => {
+              doctorName={me.name}
+              onSent={(rx) => {
                 broadcastLine(
                   newLine({
-                    text: `📄 Sent you a prescription${summary ? ` — ${summary}` : ""}. Open the Prescriptions tab to view it.`,
+                    text: `📄 Prescription${rx.diagnosis ? ` for ${rx.diagnosis}` : ""} — download it below or find it under Prescriptions.`,
+                    rx,
                   })
                 );
                 setPanel("chat");
@@ -873,7 +897,28 @@ export function ConsultationRoom({
                         }`}
                       >
                         {!mine && <p className="mb-0.5 text-[11px] text-white/50">{c.name}</p>}
-                        {c.file ? (
+                        {c.rx ? (
+                          <div className="space-y-2">
+                            <p>{c.text}</p>
+                            <button
+                              type="button"
+                              onClick={() => downloadRx(c)}
+                              disabled={rxBusy === c.id}
+                              className={`flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-semibold transition disabled:opacity-60 ${
+                                mine
+                                  ? "bg-white/20 text-white hover:bg-white/30"
+                                  : "bg-white text-ps hover:bg-white/90"
+                              }`}
+                            >
+                              {rxBusy === c.id ? (
+                                <span className="spinner" style={{ width: 13, height: 13 }} />
+                              ) : (
+                                <Icon name="download" size={13} />
+                              )}
+                              Download PDF
+                            </button>
+                          </div>
+                        ) : c.file ? (
                           <a
                             href={c.file.url}
                             target="_blank"

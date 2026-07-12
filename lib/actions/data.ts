@@ -4,6 +4,7 @@ import { createServerSupabase } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
 import { shortTime } from "@/lib/time";
 import { sendPushToUser } from "@/lib/push/send";
+import type { Prescription } from "@/lib/data";
 
 type Result = { ok: boolean };
 
@@ -378,7 +379,7 @@ export async function issuePrescriptionForAppointment(
     tests: string[];
     notes: string;
   }
-): Promise<Result> {
+): Promise<Result & { prescription?: Prescription }> {
   if (!isSupabaseConfigured) return { ok: true };
   try {
     const sb = await createServerSupabase();
@@ -393,21 +394,27 @@ export async function issuePrescriptionForAppointment(
     }
 
     const doctorName = (appt.doctor_name as string) || "Your doctor";
-    const { error } = await sb.from("prescriptions").insert({
-      appointment_id: appointmentId,
-      patient_id: (appt.patient_id as string) ?? null,
-      doctor_name: doctorName,
-      specialty: (appt.specialty as string) ?? "",
-      date_label: new Date().toLocaleDateString("en-US", {
-        month: "short",
-        day: "numeric",
-        year: "numeric",
-      }),
-      diagnosis: input.diagnosis,
-      medicines: input.medicines,
-      tests: input.tests,
-      notes: input.notes,
+    const specialty = (appt.specialty as string) ?? "";
+    const dateLabel = new Date().toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
     });
+    const { data: row, error } = await sb
+      .from("prescriptions")
+      .insert({
+        appointment_id: appointmentId,
+        patient_id: (appt.patient_id as string) ?? null,
+        doctor_name: doctorName,
+        specialty,
+        date_label: dateLabel,
+        diagnosis: input.diagnosis,
+        medicines: input.medicines,
+        tests: input.tests,
+        notes: input.notes,
+      })
+      .select("id")
+      .single();
     if (error) {
       console.error("[prescription] insert failed", { message: error.message, code: error.code });
       return { ok: false };
@@ -424,7 +431,21 @@ export async function issuePrescriptionForAppointment(
         url: "/patient/prescriptions",
       });
     }
-    return { ok: true };
+    // Hand the saved prescription back so the caller (the in-call pad) can drop a
+    // downloadable copy straight into the consultation chat.
+    return {
+      ok: true,
+      prescription: {
+        id: String(row?.id ?? `rx-${Date.now()}`),
+        doctorName,
+        specialty,
+        date: dateLabel,
+        diagnosis: input.diagnosis,
+        medicines: input.medicines,
+        tests: input.tests,
+        notes: input.notes,
+      },
+    };
   } catch (err) {
     console.error("[prescription] unexpected error", err);
     return { ok: false };

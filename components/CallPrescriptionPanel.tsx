@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Icon } from "@/components/Icon";
 import { useToast } from "@/components/Toast";
 import { issuePrescriptionForAppointment } from "@/lib/actions/data";
+import type { Prescription } from "@/lib/data";
 
 type Med = { name: string; dose: string; frequency: string; duration: string };
 
@@ -14,15 +15,18 @@ const emptyMed: Med = { name: "", dose: "", frequency: "", duration: "" };
 /* -------------------------------------------------------------------------
    Compact prescription pad shown inside the consultation room (doctor only).
    Writes a structured prescription for the appointment's patient and notifies
-   them. `onSent` lets the room drop a line in the call chat so the patient sees
-   it happen live. Dark-themed to match the call UI.
+   them. `onSent` hands the saved prescription back so the room can drop a
+   downloadable copy into the call chat — the patient can grab the PDF without
+   leaving the call. Dark-themed to match the call UI.
    ---------------------------------------------------------------------- */
 export function CallPrescriptionPanel({
   appointmentId,
+  doctorName,
   onSent,
 }: {
   appointmentId: string;
-  onSent?: (summary: string) => void;
+  doctorName?: string;
+  onSent?: (rx: Prescription) => void;
 }) {
   const { show } = useToast();
   const [diagnosis, setDiagnosis] = useState("");
@@ -62,7 +66,23 @@ export function CallPrescriptionPanel({
     }
     setSent(true);
     show("Prescription sent to the patient.", "success");
-    onSent?.(diagnosis.trim() || `${cleanMeds.length} medicine(s)`);
+    // Prefer the server's saved copy (real id/date); fall back to the form data
+    // so the demo (mock mode) still yields a downloadable prescription.
+    const rx: Prescription = res.prescription ?? {
+      id: `rx-${Date.now()}`,
+      doctorName: doctorName || "Your doctor",
+      specialty: "",
+      date: new Date().toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+      }),
+      diagnosis: diagnosis.trim(),
+      medicines: cleanMeds,
+      tests,
+      notes: notes.trim(),
+    };
+    onSent?.(rx);
   }
 
   if (sent) {
