@@ -90,6 +90,7 @@ export async function markNotificationsRead(ids?: string[]): Promise<Result> {
 /* Booking → atomically create the appointment AND the doctor's notification.
    Returns the appointment id on success, or a human-readable error. */
 export async function createAppointment(input: {
+  id: string;
   doctorId: string;
   doctorName: string;
   specialty: string;

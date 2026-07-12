@@ -251,16 +251,15 @@ export async function getPatientAppointments(userId?: string): Promise<Appointme
   if (!isSupabaseConfigured) return mock.appointments;
   try {
     const sb = createPublicClient();
-    const filter = userId
-      ? `patient_id.eq.${userId},patient_name.eq.You`
-      : `patient_name.eq.You`;
     const { data, error } = await sb
-      .from("appointments")
-      .select("*")
-      .or(filter)
-      .order("created_at", { ascending: false });
-    if (error || !data?.length) return mock.appointments;
-    return data.map(mapAppointment);
+  .from("appointments")
+  .select("*")
+  .eq("patient_id", userId)
+  .order("created_at", { ascending: false });
+
+if (error) throw error;
+
+return (data ?? []).map(mapAppointment);
   } catch {
     return mock.appointments;
   }
