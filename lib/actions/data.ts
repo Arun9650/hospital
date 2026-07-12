@@ -135,7 +135,7 @@ export async function createAppointment(input: {
       .eq("doctor_id", input.doctorId)
       .eq("date_label", input.date)
       .eq("time_label", input.time)
-      .in("status", ["Pending", "Upcoming"])
+      .in("status", [ "Upcoming"])
       .limit(1)
       .maybeSingle();
     if (existing) {
