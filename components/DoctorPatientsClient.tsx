@@ -78,7 +78,9 @@ export function DoctorPatientsClient({ patients }: { patients: Patient[] }) {
                         <div className="min-w-0">
                           <p className="truncate font-medium">{p.name}</p>
                           <p className="truncate text-xs text-mute">
-                            {p.age} · {p.gender} · {p.condition}
+                            {[p.age > 0 ? `${p.age}` : null, p.gender || null, p.condition]
+                              .filter(Boolean)
+                              .join(" · ")}
                           </p>
                         </div>
                       </div>
@@ -148,7 +150,13 @@ function PatientDetail({
         <div className="min-w-0">
           <p className="truncate font-display text-xl font-normal">{patient.name}</p>
           <p className="text-sm text-mute">
-            {patient.age} · {patient.gender} · {patient.visits} visits
+            {[
+              patient.age > 0 ? `${patient.age}` : null,
+              patient.gender || null,
+              `${patient.visits} visit${patient.visits === 1 ? "" : "s"}`,
+            ]
+              .filter(Boolean)
+              .join(" · ")}
           </p>
         </div>
       </div>

@@ -22,7 +22,6 @@ import type {
   ChatThread,
   ChatMessage,
   Patient,
-  PatientHistory,
 } from "./data";
 
 /** Demo patient name used for seeded (NULL-patient) chat threads. */
@@ -108,24 +107,69 @@ function mapRecord(r: Row): MedicalRecord {
   };
 }
 
-function mapPatient(r: Row): Patient {
-  return {
-    id: String(r.id),
-    doctorId: String(r.doctor_id ?? ""),
-    name: String(r.name ?? ""),
-    initials: String(r.initials ?? String(r.name ?? "P").slice(0, 2)),
-    age: Number(r.age ?? 0),
-    gender: String(r.gender ?? ""),
-    condition: String(r.condition ?? ""),
-    visits: Number(r.visits ?? 0),
-    lastVisit: String(r.last_visit ?? ""),
-    bloodGroup: String(r.blood_group ?? "—"),
-    allergies: String(r.allergies ?? "None"),
-    height: String(r.height ?? "—"),
-    weight: String(r.weight ?? "—"),
-    color: String(r.color ?? "#0070d1"),
-    history: (r.history as PatientHistory[]) ?? [],
-  };
+/* ---- Doctor's patient panel — derived live from their appointments -------- */
+
+const PATIENT_COLORS = [
+  "#0070d1", "#1f6f5c", "#7a4bd1", "#c25b2e", "#2e7cc2",
+  "#b03a6a", "#3a8f7a", "#5b6bd1", "#c28b2e", "#2eb0a0",
+];
+
+function initialsFromName(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+  return (name.trim().slice(0, 2) || "PT").toUpperCase();
+}
+
+function ageFromDob(dob: unknown): number {
+  if (!dob) return 0;
+  const d = new Date(String(dob));
+  if (isNaN(d.getTime())) return 0;
+  const years = Math.floor((Date.now() - d.getTime()) / (365.25 * 24 * 3600 * 1000));
+  return years > 0 && years < 150 ? years : 0;
+}
+
+/* Roll a doctor's appointment rows up into one record per patient. Vitals
+   (blood group / allergies / height / weight) aren't captured anywhere yet, so
+   they show as placeholders; everything else is real. */
+function buildPatientsFromAppointments(rows: Row[], doctorId: string): Patient[] {
+  const groups = new Map<string, Row[]>();
+  for (const r of rows) {
+    const key = String(r.patient_id ?? r.patient_name ?? "unknown");
+    const list = groups.get(key) ?? [];
+    list.push(r);
+    groups.set(key, list);
+  }
+
+  let i = 0;
+  const out: Patient[] = [];
+  for (const [key, appts] of groups) {
+    const latest = appts[0]; // rows arrive newest-first
+    const profile = (latest.patient as Row) ?? {};
+    const name = String(profile.full_name || latest.patient_name || "Patient");
+    out.push({
+      id: key,
+      doctorId,
+      name,
+      initials: String(profile.initials || initialsFromName(name)),
+      age: ageFromDob(profile.dob),
+      gender: String(profile.gender ?? ""),
+      condition: String(latest.reason || "General consultation"),
+      visits: appts.length,
+      lastVisit: String(latest.date_label ?? ""),
+      bloodGroup: "—",
+      allergies: "Not recorded",
+      height: "—",
+      weight: "—",
+      color: String(profile.avatar_color || PATIENT_COLORS[i % PATIENT_COLORS.length]),
+      history: appts.slice(0, 6).map((a) => ({
+        date: String(a.date_label ?? ""),
+        title: String(a.reason || "Consultation"),
+        by: "You",
+      })),
+    });
+    i++;
+  }
+  return out;
 }
 
 function mapNotification(r: Row): NotificationItem {
@@ -303,20 +347,26 @@ export async function getDoctorAppointments(doctorId: string): Promise<Appointme
   }
 }
 
-/** Patients on a doctor's panel (doctor portal → Patient records). */
+/**
+ * Patients on a doctor's panel — built live from the doctor's real appointments
+ * (one record per distinct patient, newest visit first). No mock/seed data:
+ * returns an empty list when the doctor has no appointments yet.
+ */
 export async function getDoctorPatients(doctorId: string): Promise<Patient[]> {
-  if (!isSupabaseConfigured) return mock.patients;
+  if (!isSupabaseConfigured || !doctorId) return [];
   try {
     const sb = createPublicClient();
     const { data, error } = await sb
-      .from("patients")
-      .select("*")
+      .from("appointments")
+      .select(
+        "id, patient_id, patient_name, reason, date_label, created_at, patient:profiles(full_name, dob, gender, avatar_color, initials)"
+      )
       .eq("doctor_id", doctorId)
-      .order("last_visit", { ascending: false });
-    if (error || !data?.length) return mock.patients;
-    return data.map(mapPatient);
+      .order("created_at", { ascending: false });
+    if (error || !data?.length) return [];
+    return buildPatientsFromAppointments(data as Row[], doctorId);
   } catch {
-    return mock.patients;
+    return [];
   }
 }
 
