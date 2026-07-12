@@ -6,6 +6,7 @@ import { PageHeader } from "@/components/DashboardShell";
 import { Avatar, Badge, Button } from "@/components/ui";
 import { useToast } from "@/components/Toast";
 import { issuePrescription } from "@/lib/actions/data";
+import { downloadPrescriptionPdf } from "@/lib/prescriptionPdf";
 
 type Med = { name: string; dose: string; frequency: string; duration: string };
 
@@ -21,7 +22,32 @@ export default function PrescriptionBuilder() {
   const [notes, setNotes] = useState("Reduce salt, 30 min walk daily. Follow-up in 4 weeks.");
   const [issued, setIssued] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [downloading, setDownloading] = useState(false);
   const { show } = useToast();
+
+  // Demo patient for this builder (mirrors the header badge).
+  const patientName = "Rohan Mehta";
+
+  async function handleDownload() {
+    setDownloading(true);
+    try {
+      await downloadPrescriptionPdf(
+        {
+          id: `rx-${Date.now()}`,
+          doctorName: "Dr. Anaya Rao",
+          specialty: "Cardiology",
+          date: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+          diagnosis,
+          medicines: meds.filter((m) => m.name),
+          tests,
+          notes,
+        },
+        patientName
+      );
+    } finally {
+      setDownloading(false);
+    }
+  }
 
   async function handleIssue() {
     setSaving(true);
@@ -163,12 +189,19 @@ export default function PrescriptionBuilder() {
             </div>
             <div className="border-t border-[#eee] p-4">
               {issued ? (
-                <div className="flex items-center justify-center gap-2 text-sm font-medium text-success">
-                  ✓ Prescription issued & sent
+                <div className="flex items-center gap-2">
+                  <span className="flex flex-1 items-center justify-center gap-1.5 text-sm font-medium text-success">
+                    ✓ Issued &amp; sent
+                  </span>
+                  <Button variant="light" size="sm" loading={downloading} onClick={handleDownload}>
+                    Download PDF
+                  </Button>
                 </div>
               ) : (
                 <div className="flex gap-2">
-                  <Button variant="light" size="sm" className="flex-1" disabled={saving}>Save draft</Button>
+                  <Button variant="light" size="sm" className="flex-1" loading={downloading} onClick={handleDownload}>
+                    Download PDF
+                  </Button>
                   <Button size="sm" className="flex-1" loading={saving} onClick={handleIssue}>Issue Rx</Button>
                 </div>
               )}
