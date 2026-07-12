@@ -63,3 +63,29 @@ export function getIceServers(): RTCIceServer[] {
 /** True when a TURN relay is configured — used to decide whether to warn that
     calls across restrictive networks may fail without one. */
 export const hasTurnConfigured = Boolean(process.env.NEXT_PUBLIC_TURN_URL);
+
+/**
+ * Resolve the ICE servers to use for a call.
+ *
+ * Prefers fresh, server-minted credentials from /api/turn-credentials (Metered
+ * via a secret API key that never reaches the browser). Falls back to the
+ * static env config (getIceServers) when the route returns nothing or fails —
+ * so a call still connects on the LAN / via STUN even without the route.
+ *
+ * Browser-only (uses fetch with a relative URL). Call it right before creating
+ * the RTCPeerConnection so credentials are current.
+ */
+export async function fetchIceServers(): Promise<RTCIceServer[]> {
+  try {
+    const res = await fetch("/api/turn-credentials", { cache: "no-store" });
+    if (res.ok) {
+      const data = (await res.json()) as { iceServers?: RTCIceServer[] };
+      if (Array.isArray(data.iceServers) && data.iceServers.length) {
+        return data.iceServers;
+      }
+    }
+  } catch {
+    // Network/route error — fall through to static env config.
+  }
+  return getIceServers();
+}

@@ -8,7 +8,7 @@ import { Icon } from "@/components/Icon";
 import { Logo } from "@/components/Logo";
 import { createClient } from "@/lib/supabase/client";
 import { updateAppointmentStatus } from "@/lib/actions/data";
-import { getIceServers } from "@/lib/webrtc/ice";
+import { getIceServers, fetchIceServers } from "@/lib/webrtc/ice";
 
 export type RoomUser = {
   role: "patient" | "doctor";
@@ -23,7 +23,9 @@ type Signal =
   | { from: string; kind: "offer" | "answer"; sdp: RTCSessionDescriptionInit }
   | { from: string; kind: "ice"; candidate: RTCIceCandidateInit };
 
-const ICE_SERVERS = getIceServers();
+// Synchronous fallback (env-based). The live call prefers fresh, server-minted
+// credentials fetched via fetchIceServers() just before the peer is created.
+const ICE_SERVERS_FALLBACK = getIceServers();
 
 // How long to wait for a peer connection to reach "connected" before declaring
 // the attempt failed and offering a retry (instead of a hung "Connecting…").
@@ -62,6 +64,7 @@ export function ConsultationRoom({
   const chatRef = useRef<HTMLDivElement>(null);
   const isOffererRef = useRef(false);
   const reofferTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+  const iceServersRef = useRef<RTCIceServer[]>(ICE_SERVERS_FALLBACK);
 
   const [status, setStatus] = useState<
     "init" | "waiting" | "connecting" | "connected" | "ended" | "failed"
@@ -134,8 +137,9 @@ export function ConsultationRoom({
     }
 
     function newPeer() {
-      log("creating RTCPeerConnection", ICE_SERVERS);
-      const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+      const iceServers = iceServersRef.current;
+      log("creating RTCPeerConnection", iceServers);
+      const pc = new RTCPeerConnection({ iceServers });
       const tracks = localStream.current?.getTracks() ?? [];
       if (tracks.length) {
         log("adding local tracks:", tracks.map((t) => `${t.kind}:${t.readyState}`));
@@ -430,7 +434,11 @@ export function ConsultationRoom({
       }
       if (cancelled) return;
 
-      // 2. Peer connection.
+      // 2. Peer connection — with fresh, server-minted ICE credentials (falls
+      //    back to the static env config if the route is unavailable).
+      iceServersRef.current = await fetchIceServers();
+      if (cancelled) return;
+      log("using ICE servers:", iceServersRef.current.length, "entries");
       pcRef.current = newPeer();
       setStatus("waiting");
 
