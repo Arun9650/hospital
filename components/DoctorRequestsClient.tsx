@@ -11,24 +11,29 @@ import { updateAppointmentStatus } from "@/lib/actions/data";
 
 type Status = "Pending" | "Accepted" | "Declined" | "Completed";
 
+// The row's display status, derived from the appointment's DB status. Kept as a
+// pure function of props so a live refresh (router.refresh) that brings new or
+// updated requests is reflected immediately — nothing is frozen in state.
+function statusFromRequest(r: Appointment): Status {
+  return r.status === "Pending"
+    ? "Pending"
+    : r.status === "Completed"
+    ? "Completed"
+    : r.status === "Cancelled"
+    ? "Declined"
+    : "Accepted";
+}
+
 export function DoctorRequestsClient({ requests }: { requests: Appointment[] }) {
   const { show } = useToast();
-  const [states, setStates] = useState<Record<string, Status>>(
-    Object.fromEntries(
-      requests.map((r) => [
-        r.id,
-        r.status === "Pending"
-          ? "Pending"
-          : r.status === "Completed"
-          ? "Completed"
-          : r.status === "Cancelled"
-          ? "Declined"
-          : "Accepted",
-      ])
-    )
-  );
+  // Optimistic local changes, layered over the server-derived status. Only ids
+  // the doctor just acted on live here; everything else follows the props, so
+  // realtime refreshes surface new requests and status changes on their own.
+  const [overrides, setOverrides] = useState<Record<string, Status>>({});
   // Which row is mid-request, so we can show a spinner and block double-clicks.
   const [pending, setPending] = useState<Record<string, Status | undefined>>({});
+
+  const statusOf = (r: Appointment): Status => overrides[r.id] ?? statusFromRequest(r);
 
   async function set(id: string, s: Status, patient?: string) {
     if (pending[id]) return;
@@ -36,7 +41,7 @@ export function DoctorRequestsClient({ requests }: { requests: Appointment[] }) 
     // Persist to Supabase (no-op in mock mode) and reflect the result once done.
     if (s === "Accepted") await updateAppointmentStatus(id, "Upcoming");
     if (s === "Declined") await updateAppointmentStatus(id, "Cancelled");
-    setStates((prev) => ({ ...prev, [id]: s }));
+    setOverrides((prev) => ({ ...prev, [id]: s }));
     setPending((prev) => ({ ...prev, [id]: undefined }));
     if (s === "Accepted") show(`Request from ${patient ?? "patient"} accepted`, "success");
     if (s === "Declined") show(`Request from ${patient ?? "patient"} declined`, "info");
@@ -46,9 +51,10 @@ export function DoctorRequestsClient({ requests }: { requests: Appointment[] }) 
   const { active, completed } = useMemo(() => {
     const active: Appointment[] = [];
     const completed: Appointment[] = [];
-    for (const r of requests) (states[r.id] === "Completed" ? completed : active).push(r);
+    for (const r of requests) (statusOf(r) === "Completed" ? completed : active).push(r);
     return { active, completed };
-  }, [requests, states]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [requests, overrides]);
 
   return (
     <>
@@ -65,7 +71,7 @@ export function DoctorRequestsClient({ requests }: { requests: Appointment[] }) 
       ) : (
         <div className="stagger space-y-4">
           {active.map((r) => {
-            const s = states[r.id];
+            const s = statusOf(r);
             return (
               <div key={r.id} className="card-flat lift p-5">
                 <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">

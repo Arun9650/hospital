@@ -1,5 +1,6 @@
 import { DoctorShell } from "@/components/roleShells";
 import { DoctorPatientsClient } from "@/components/DoctorPatientsClient";
+import { RealtimeRefresh } from "@/components/RealtimeRefresh";
 import { getCurrentDoctor, getDoctorPatients } from "@/lib/db";
 
 export default async function DoctorPatients() {
@@ -8,8 +9,8 @@ export default async function DoctorPatients() {
 
   return (
     <DoctorShell>
+      <RealtimeRefresh tables={["appointments"]} />
       <DoctorPatientsClient patients={patients} />
     </DoctorShell>
-
-);
+  );
 }

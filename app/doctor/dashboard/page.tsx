@@ -2,6 +2,7 @@ import Link from "next/link";
 import { DoctorShell } from "@/components/roleShells";
 import { PageHeader } from "@/components/DashboardShell";
 import { Avatar, Badge, Button, Stat } from "@/components/ui";
+import { RealtimeRefresh } from "@/components/RealtimeRefresh";
 import { earnings } from "@/lib/data";
 import { getDoctorAppointments, getCurrentDoctor } from "@/lib/db";
 import { getSessionUser } from "@/lib/auth";
@@ -34,6 +35,7 @@ export default async function DoctorDashboard() {
   const appointmentRequests = doctor ? await getDoctorAppointments(doctor.id) : [];
   return (
     <DoctorShell>
+      <RealtimeRefresh tables={["appointments"]} />
       <PageHeader
         title={`Welcome back, ${withDoctorTitle(user?.name)}`}
         subtitle="Here's your practice at a glance."

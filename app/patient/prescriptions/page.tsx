@@ -2,6 +2,7 @@ import { PatientShell } from "@/components/roleShells";
 import { PageHeader } from "@/components/DashboardShell";
 import { Badge, Button } from "@/components/ui";
 import { PrescriptionDownloadButton } from "@/components/PrescriptionDownloadButton";
+import { RealtimeRefresh } from "@/components/RealtimeRefresh";
 import { getPrescriptions } from "@/lib/db";
 import { getUserId, getSessionUser } from "@/lib/auth";
 
@@ -11,6 +12,7 @@ export default async function PrescriptionsPage() {
   const prescriptions = await getPrescriptions(userId);
   return (
     <PatientShell>
+      <RealtimeRefresh tables={["prescriptions"]} />
       <PageHeader
         title="Digital prescriptions"
         subtitle="Secure, shareable and ready the moment your consultation ends."

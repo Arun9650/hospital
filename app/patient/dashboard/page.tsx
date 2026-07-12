@@ -4,6 +4,7 @@ import { PageHeader } from "@/components/DashboardShell";
 import { AppointmentCard } from "@/components/AppointmentCard";
 import { DoctorCard } from "@/components/DoctorCard";
 import { Button, Badge } from "@/components/ui";
+import { RealtimeRefresh } from "@/components/RealtimeRefresh";
 import {
   getPatientAppointments,
   getFeaturedDoctors,
@@ -39,6 +40,7 @@ export default async function PatientDashboard() {
   const upcoming = appointments.filter((a) => a.status === "Upcoming");
   return (
     <PatientShell>
+      <RealtimeRefresh tables={["appointments", "prescriptions", "notifications"]} />
       <PageHeader
         title={`Good afternoon, ${firstName}`}
         subtitle="Here's a calm overview of your health today."

@@ -58,9 +58,10 @@ Open the **SQL Editor** in Supabase and run, in order:
 6. `supabase/migrations/0006_notifications_realtime.sql` — stream notifications live.
 7. `supabase/migrations/0007_appointment_booking.sql` — atomic booking function + notification timestamps/relations.
 8. `supabase/migrations/0008_storage.sql` — `consultation-files` Storage bucket + policies for in-call file sharing.
-9. `supabase/seed.sql` — demo specialties, doctors, reviews, appointments, etc.
-10. `supabase/seed_chat.sql` — demo chat threads & messages.
-11. `supabase/seed_patients.sql` — demo patient records for Dr. Anaya Rao's panel.
+9. `supabase/migrations/0009_realtime_tables.sql` — stream `appointments` & `prescriptions` live so lists refresh without a manual reload.
+10. `supabase/seed.sql` — demo specialties, doctors, reviews, appointments, etc.
+11. `supabase/seed_chat.sql` — demo chat threads & messages.
+12. `supabase/seed_patients.sql` — demo patient records for Dr. Anaya Rao's panel.
 
 > **In-call file sharing:** `0008_storage.sql` creates a **public** `consultation-files`
 > bucket so a shared link works for both parties. For real medical files, make the
@@ -68,10 +69,12 @@ Open the **SQL Editor** in Supabase and run, in order:
 
 (Or, with the Supabase CLI: `supabase db push` then run the seed files.)
 
-> **Realtime:** `0002_chat.sql` adds `chat_messages` / `chat_threads` and
-> `0006_notifications_realtime.sql` adds `notifications` to the
-> `supabase_realtime` publication, so new messages and notifications stream to open screens with no
-> extra dashboard config. If you ever reset Realtime, re-run that migration.
+> **Realtime:** `0002_chat.sql` adds `chat_messages` / `chat_threads`,
+> `0006_notifications_realtime.sql` adds `notifications`, and
+> `0009_realtime_tables.sql` adds `appointments` / `prescriptions` to the
+> `supabase_realtime` publication, so new messages, notifications, bookings and
+> prescriptions stream to open screens with no extra dashboard config. If you
+> ever reset Realtime, re-run those migrations.
 
 ## 4. Configure Auth
 
