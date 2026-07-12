@@ -3,6 +3,7 @@ import { Roboto, Inter } from "next/font/google";
 import "./globals.css";
 import { ServiceWorkerRegister } from "@/components/ServiceWorkerRegister";
 import { SessionProvider } from "@/components/SessionProvider";
+import { ToastProvider } from "@/components/Toast";
 import { getSessionUser } from "@/lib/auth";
 
 const display = Roboto({
@@ -57,7 +58,9 @@ export default async function RootLayout({
       className={`${display.variable} ${sans.variable} h-full`}
     >
       <body className="min-h-full">
-        <SessionProvider user={user}>{children}</SessionProvider>
+        <SessionProvider user={user}>
+          <ToastProvider>{children}</ToastProvider>
+        </SessionProvider>
         <ServiceWorkerRegister />
       </body>
     </html>

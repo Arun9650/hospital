@@ -79,6 +79,17 @@ export function VerifiedBadge() {
   );
 }
 
+/** Inline loading spinner that inherits the current text color. */
+export function Spinner({ size = 16 }: { size?: number }) {
+  return (
+    <span
+      className="spinner"
+      style={{ width: size, height: size }}
+      aria-hidden
+    />
+  );
+}
+
 type ButtonProps = {
   children: ReactNode;
   href?: string;
@@ -88,6 +99,7 @@ type ButtonProps = {
   type?: "button" | "submit";
   onClick?: () => void;
   disabled?: boolean;
+  loading?: boolean;
   full?: boolean;
 };
 
@@ -100,21 +112,39 @@ export function Button({
   type = "button",
   onClick,
   disabled,
+  loading = false,
   full,
 }: ButtonProps) {
   const cls = `btn btn-${variant} ${size === "sm" ? "btn-sm" : ""} ${
     full ? "w-full" : ""
   } ${className}`.trim();
-  if (href) {
+  // While loading, swap the label for a spinner but keep the button's width so
+  // the layout doesn't jump.
+  const content = loading ? (
+    <>
+      <Spinner size={size === "sm" ? 15 : 17} />
+      <span className="opacity-80">{children}</span>
+    </>
+  ) : (
+    children
+  );
+  // Links can't be disabled; fall back to a button when loading is requested.
+  if (href && !loading) {
     return (
-      <Link href={href} className={cls}>
+      <Link href={href} className={cls} aria-disabled={disabled || undefined}>
         {children}
       </Link>
     );
   }
   return (
-    <button type={type} onClick={onClick} disabled={disabled} className={cls}>
-      {children}
+    <button
+      type={type}
+      onClick={onClick}
+      disabled={disabled || loading}
+      aria-busy={loading || undefined}
+      className={cls}
+    >
+      {content}
     </button>
   );
 }

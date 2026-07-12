@@ -32,10 +32,12 @@ Open the **SQL Editor** in Supabase and run, in order:
 
 1. `supabase/migrations/0001_schema.sql` — tables, the sign-up trigger, and RLS.
 2. `supabase/migrations/0002_chat.sql` — chat tables, RLS, and realtime publication.
-3. `supabase/seed.sql` — demo specialties, doctors, reviews, appointments, etc.
-4. `supabase/seed_chat.sql` — demo chat threads & messages.
+3. `supabase/migrations/0003_patients.sql` — the doctor's `patients` table and RLS.
+4. `supabase/seed.sql` — demo specialties, doctors, reviews, appointments, etc.
+5. `supabase/seed_chat.sql` — demo chat threads & messages.
+6. `supabase/seed_patients.sql` — demo patient records for Dr. Anaya Rao's panel.
 
-(Or, with the Supabase CLI: `supabase db push` then run the two seed files.)
+(Or, with the Supabase CLI: `supabase db push` then run the seed files.)
 
 > **Realtime:** `0002_chat.sql` adds `chat_messages` / `chat_threads` to the
 > `supabase_realtime` publication, so new messages stream to open chats with no

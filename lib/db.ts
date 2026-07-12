@@ -20,6 +20,8 @@ import type {
   NotificationItem,
   ChatThread,
   ChatMessage,
+  Patient,
+  PatientHistory,
 } from "./data";
 
 /** Demo patient name used for seeded (NULL-patient) chat threads. */
@@ -102,6 +104,26 @@ function mapRecord(r: Row): MedicalRecord {
     date: String(r.date_label ?? ""),
     by: String(r.issued_by ?? ""),
     size: String(r.size ?? ""),
+  };
+}
+
+function mapPatient(r: Row): Patient {
+  return {
+    id: String(r.id),
+    doctorId: String(r.doctor_id ?? ""),
+    name: String(r.name ?? ""),
+    initials: String(r.initials ?? String(r.name ?? "P").slice(0, 2)),
+    age: Number(r.age ?? 0),
+    gender: String(r.gender ?? ""),
+    condition: String(r.condition ?? ""),
+    visits: Number(r.visits ?? 0),
+    lastVisit: String(r.last_visit ?? ""),
+    bloodGroup: String(r.blood_group ?? "—"),
+    allergies: String(r.allergies ?? "None"),
+    height: String(r.height ?? "—"),
+    weight: String(r.weight ?? "—"),
+    color: String(r.color ?? "#0070d1"),
+    history: (r.history as PatientHistory[]) ?? [],
   };
 }
 
@@ -292,6 +314,23 @@ export async function getDoctorAppointments(doctorId: string): Promise<Appointme
     return data.map(mapAppointment);
   } catch {
     return mock.appointmentRequests;
+  }
+}
+
+/** Patients on a doctor's panel (doctor portal → Patient records). */
+export async function getDoctorPatients(doctorId: string): Promise<Patient[]> {
+  if (!isSupabaseConfigured) return mock.patients;
+  try {
+    const sb = createPublicClient();
+    const { data, error } = await sb
+      .from("patients")
+      .select("*")
+      .eq("doctor_id", doctorId)
+      .order("last_visit", { ascending: false });
+    if (error || !data?.length) return mock.patients;
+    return data.map(mapPatient);
+  } catch {
+    return mock.patients;
   }
 }
 

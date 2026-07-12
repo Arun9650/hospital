@@ -83,6 +83,28 @@ export type ServiceItem = {
   icon: string;
 };
 
+/** One entry in a patient's recent clinical timeline. */
+export type PatientHistory = { date: string; title: string; by: string };
+
+/** A patient on a doctor's panel (doctor portal → Patient records). */
+export type Patient = {
+  id: string;
+  doctorId: string;
+  name: string;
+  initials: string;
+  age: number;
+  gender: string;
+  condition: string;
+  visits: number;
+  lastVisit: string;
+  bloodGroup: string;
+  allergies: string;
+  height: string;
+  weight: string;
+  color: string;
+  history: PatientHistory[];
+};
+
 export type NotificationItem = {
   id: string;
   title: string;
@@ -469,6 +491,112 @@ export const medicalRecords: MedicalRecord[] = [
   { id: "mr4", title: "Hypertension Rx", type: "Prescription", date: "Jul 8, 2026", by: "Dr. Anaya Rao", size: "0.3 MB" },
   { id: "mr5", title: "COVID-19 Booster", type: "Vaccination", date: "Jan 14, 2026", by: "Aria Clinic", size: "0.2 MB" },
   { id: "mr6", title: "ENT Discharge Note", type: "Discharge Summary", date: "Dec 3, 2025", by: "Metro Hospital", size: "0.6 MB" },
+];
+
+/* ---- Doctor's patient panel (doctor portal) --------------------------- */
+export const patients: Patient[] = [
+  {
+    id: "pat-rohan",
+    doctorId: "dr-anaya-rao",
+    name: "Rohan Mehta",
+    initials: "RM",
+    age: 34,
+    gender: "Male",
+    condition: "Hypertension",
+    visits: 6,
+    lastVisit: "Today",
+    bloodGroup: "B+",
+    allergies: "Penicillin",
+    height: "178 cm",
+    weight: "82 kg",
+    color: "#7a4bd1",
+    history: [
+      { date: "Jul 8, 2026", title: "Hypertension follow-up", by: "You" },
+      { date: "Jun 2, 2026", title: "Lipid profile review", by: "You" },
+      { date: "Apr 18, 2026", title: "Chest X-ray — clear", by: "City Imaging" },
+    ],
+  },
+  {
+    id: "pat-grace",
+    doctorId: "dr-anaya-rao",
+    name: "Grace Lin",
+    initials: "GL",
+    age: 41,
+    gender: "Female",
+    condition: "Palpitations",
+    visits: 3,
+    lastVisit: "Today",
+    bloodGroup: "O+",
+    allergies: "None",
+    height: "165 cm",
+    weight: "60 kg",
+    color: "#2e7cc2",
+    history: [
+      { date: "Jul 12, 2026", title: "Palpitations assessment", by: "You" },
+      { date: "Jun 20, 2026", title: "Holter monitor fitted", by: "Aria Labs" },
+    ],
+  },
+  {
+    id: "pat-ahmed",
+    doctorId: "dr-anaya-rao",
+    name: "Ahmed Farah",
+    initials: "AF",
+    age: 58,
+    gender: "Male",
+    condition: "Post-angioplasty",
+    visits: 11,
+    lastVisit: "Jun 30",
+    bloodGroup: "A+",
+    allergies: "Sulfa drugs",
+    height: "172 cm",
+    weight: "78 kg",
+    color: "#c25b2e",
+    history: [
+      { date: "Jun 30, 2026", title: "Post-angioplasty follow-up", by: "You" },
+      { date: "May 15, 2026", title: "Angioplasty — LAD stent", by: "Metro Hospital" },
+      { date: "May 2, 2026", title: "Coronary angiography", by: "Metro Hospital" },
+    ],
+  },
+  {
+    id: "pat-sara",
+    doctorId: "dr-anaya-rao",
+    name: "Sara Iqbal",
+    initials: "SI",
+    age: 29,
+    gender: "Female",
+    condition: "Anxiety, palpitations",
+    visits: 2,
+    lastVisit: "Jun 12",
+    bloodGroup: "AB+",
+    allergies: "None",
+    height: "160 cm",
+    weight: "55 kg",
+    color: "#b03a6a",
+    history: [
+      { date: "Jun 12, 2026", title: "Anxiety & palpitations review", by: "You" },
+      { date: "Apr 28, 2026", title: "Thyroid function test — normal", by: "Aria Labs" },
+    ],
+  },
+  {
+    id: "pat-tom",
+    doctorId: "dr-anaya-rao",
+    name: "Tom Becker",
+    initials: "TB",
+    age: 47,
+    gender: "Male",
+    condition: "High cholesterol",
+    visits: 8,
+    lastVisit: "May 28",
+    bloodGroup: "O-",
+    allergies: "Statins (myalgia)",
+    height: "181 cm",
+    weight: "90 kg",
+    color: "#1f6f5c",
+    history: [
+      { date: "May 28, 2026", title: "Lipid management review", by: "You" },
+      { date: "Apr 10, 2026", title: "Lipid profile — elevated LDL", by: "Aria Labs" },
+    ],
+  },
 ];
 
 /* ---- Homepage service tiles ------------------------------------------ */
