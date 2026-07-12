@@ -364,18 +364,41 @@ export async function getMedicalRecords(userId?: string): Promise<MedicalRecord[
   }
 }
 
+/**
+ * Read notifications matching `filter`, newest first. Returns null on a hard
+ * query error (caller then uses mock data). If ordering by `created_at` fails —
+ * e.g. migration 0004 hasn't been applied and the column doesn't exist yet — we
+ * retry unordered so real notifications aren't hidden behind a missing column.
+ */
+async function fetchNotifications(filter: string): Promise<NotificationItem[] | null> {
+  const sb = createPublicClient();
+  let res = await sb
+    .from("notifications")
+    .select("*")
+    .or(filter)
+    .order("created_at", { ascending: false });
+  if (res.error) {
+    // created_at may be missing (migration 0004 not applied) — retry unordered.
+    res = await sb.from("notifications").select("*").or(filter);
+  }
+  if (res.error) return null;
+
+  // Guarantee newest-first (current on top, older at the bottom) even on the
+  // unordered fallback path. ISO timestamps sort lexicographically, so a string
+  // compare is enough; rows without a created_at keep their relative order.
+  const rows = ((res.data ?? []) as Row[])
+    .slice()
+    .sort((a, b) => String(b.created_at ?? "").localeCompare(String(a.created_at ?? "")));
+  return rows.map(mapNotification);
+}
+
 export async function getNotifications(userId?: string): Promise<NotificationItem[]> {
   if (!isSupabaseConfigured) return mock.notifications;
   try {
-    const sb = createPublicClient();
     const filter = userId ? `user_id.eq.${userId},user_id.is.null` : `user_id.is.null`;
-    const { data, error } = await sb
-      .from("notifications")
-      .select("*")
-      .or(filter)
-      .order("created_at", { ascending: false });
-    if (error || !data?.length) return mock.notifications;
-    return data.map(mapNotification);
+    const rows = await fetchNotifications(filter);
+    if (!rows || rows.length === 0) return mock.notifications;
+    return rows;
   } catch {
     return mock.notifications;
   }
@@ -385,15 +408,10 @@ export async function getNotifications(userId?: string): Promise<NotificationIte
 export async function getDoctorNotifications(profileId?: string): Promise<NotificationItem[]> {
   if (!isSupabaseConfigured) return mock.doctorNotifications;
   try {
-    const sb = createPublicClient();
     const filter = profileId ? `user_id.eq.${profileId},user_id.is.null` : `user_id.is.null`;
-    const { data, error } = await sb
-      .from("notifications")
-      .select("*")
-      .or(filter)
-      .order("created_at", { ascending: false });
-    if (error || !data?.length) return mock.doctorNotifications;
-    return data.map(mapNotification);
+    const rows = await fetchNotifications(filter);
+    if (!rows || rows.length === 0) return mock.doctorNotifications;
+    return rows;
   } catch {
     return mock.doctorNotifications;
   }

@@ -1,13 +1,15 @@
 import { DoctorShell } from "@/components/roleShells";
 import { PageHeader } from "@/components/DashboardShell";
-import { NotificationsView } from "@/components/NotificationsView";
+import { NotificationsRealtime } from "@/components/NotificationsRealtime";
 import { PushSubscribe } from "@/components/PushSubscribe";
 import { getDoctorNotifications } from "@/lib/db";
 import { getUserId } from "@/lib/auth";
 
 export default async function DoctorNotifications() {
   const userId = await getUserId();
+  console.log("🚀 ~ DoctorNotifications ~ userId:", userId)
   const notifications = await getDoctorNotifications(userId);
+  console.log("🚀 ~ DoctorNotifications ~ notifications:", notifications)
   const unread = notifications.filter((n) => n.unread).length;
   return (
     <DoctorShell>
@@ -21,7 +23,7 @@ export default async function DoctorNotifications() {
           </div>
         }
       />
-      <NotificationsView items={notifications} />
+      <NotificationsRealtime initial={notifications} userId={userId} />
     </DoctorShell>
   );
 }

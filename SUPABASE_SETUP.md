@@ -55,14 +55,16 @@ Open the **SQL Editor** in Supabase and run, in order:
 3. `supabase/migrations/0003_patients.sql` — the doctor's `patients` table and RLS.
 4. `supabase/migrations/0004_notifications.sql` — timestamp so new notifications sort first.
 5. `supabase/migrations/0005_push.sql` — `push_subscriptions` table for Web Push.
-6. `supabase/seed.sql` — demo specialties, doctors, reviews, appointments, etc.
-7. `supabase/seed_chat.sql` — demo chat threads & messages.
-8. `supabase/seed_patients.sql` — demo patient records for Dr. Anaya Rao's panel.
+6. `supabase/migrations/0006_notifications_realtime.sql` — stream notifications live.
+7. `supabase/seed.sql` — demo specialties, doctors, reviews, appointments, etc.
+8. `supabase/seed_chat.sql` — demo chat threads & messages.
+9. `supabase/seed_patients.sql` — demo patient records for Dr. Anaya Rao's panel.
 
 (Or, with the Supabase CLI: `supabase db push` then run the seed files.)
 
-> **Realtime:** `0002_chat.sql` adds `chat_messages` / `chat_threads` to the
-> `supabase_realtime` publication, so new messages stream to open chats with no
+> **Realtime:** `0002_chat.sql` adds `chat_messages` / `chat_threads` and
+> `0006_notifications_realtime.sql` adds `notifications` to the
+> `supabase_realtime` publication, so new messages and notifications stream to open screens with no
 > extra dashboard config. If you ever reset Realtime, re-run that migration.
 
 ## 4. Configure Auth
