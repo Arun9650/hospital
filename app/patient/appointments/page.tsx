@@ -13,6 +13,7 @@ export default async function AppointmentsPage() {
   console.log("🚀 ~ AppointmentsPage ~ userId:", userId)
   const appointments = await getPatientAppointments(userId);
   console.log("🚀 ~ AppointmentsPage ~ appointments:", appointments)
+  const pending = appointments.filter((a) => a.status === "Pending");
   const upcoming = appointments.filter((a) => a.status === "Upcoming");
   const completed = appointments.filter((a) => a.status === "Completed");
 
@@ -27,6 +28,22 @@ export default async function AppointmentsPage() {
       <div className="card-flat p-6">
         <Tabs
           tabs={[
+            {
+              label: `Pending (${pending.length})`,
+              content:
+                pending.length === 0 ? (
+                  <EmptyState
+                    title="No pending appointments"
+                    body="Your appointments will appear here once you book them."
+                  />
+                ) : (
+                  <div className="stagger space-y-3">
+                    {pending.map((a) => (
+                      <AppointmentCard key={a.id} appt={a} />
+                    ))}
+                  </div>
+                ),
+            },
             {
               label: `Upcoming (${upcoming.length})`,
               content:
