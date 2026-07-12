@@ -1,11 +1,13 @@
 import { PatientShell } from "@/components/roleShells";
 import { PageHeader } from "@/components/DashboardShell";
 import { Badge, Button } from "@/components/ui";
+import { PrescriptionDownloadButton } from "@/components/PrescriptionDownloadButton";
 import { getPrescriptions } from "@/lib/db";
-import { getUserId } from "@/lib/auth";
+import { getUserId, getSessionUser } from "@/lib/auth";
 
 export default async function PrescriptionsPage() {
   const userId = await getUserId();
+  const user = await getSessionUser();
   const prescriptions = await getPrescriptions(userId);
   return (
     <PatientShell>
@@ -27,7 +29,7 @@ export default async function PrescriptionsPage() {
                 </div>
               </div>
               <div className="flex gap-2">
-                <Button variant="light" size="sm">Download PDF</Button>
+                <PrescriptionDownloadButton rx={rx} patientName={user?.name} />
                 <Button size="sm">Order medicines</Button>
               </div>
             </div>

@@ -35,6 +35,9 @@ export function CallPrescriptionPanel({
   function updateMed(i: number, k: keyof Med, v: string) {
     setMeds((m) => m.map((x, idx) => (idx === i ? { ...x, [k]: v } : x)));
   }
+  function addMed() {
+    setMeds((m) => [...m, { ...emptyMed }]);
+  }
   function toggleTest(t: string) {
     setTests((c) => (c.includes(t) ? c.filter((x) => x !== t) : [...c, t]));
   }
@@ -100,15 +103,7 @@ export function CallPrescriptionPanel({
       </Field>
 
       <div>
-        <div className="mb-2 flex items-center justify-between">
-          <span className="font-medium text-white/80">Medicines</span>
-          <button
-            onClick={() => setMeds((m) => [...m, { ...emptyMed }])}
-            className="text-xs text-[#53b1ff] hover:underline"
-          >
-            + Add
-          </button>
-        </div>
+        <span className="mb-2 block font-medium text-white/80">Medicines</span>
         <div className="space-y-3">
           {meds.map((m, i) => (
             <div key={i} className="rounded-lg border border-white/10 p-2.5">
@@ -132,6 +127,12 @@ export function CallPrescriptionPanel({
             </div>
           ))}
         </div>
+        <button
+          onClick={addMed}
+          className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-white/20 py-2 text-xs font-medium text-white/70 transition-colors hover:border-white/40 hover:text-white"
+        >
+          <span className="text-sm leading-none">＋</span> Add another medicine
+        </button>
       </div>
 
       <div>
