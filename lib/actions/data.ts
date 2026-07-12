@@ -163,6 +163,7 @@ export async function createAppointment(input: {
     // The in-app notification already streamed to the doctor via Realtime the
     // moment the transaction committed. Web Push is the only post-commit side
     // effect left, and it targets the doctor's linked account when they have one.
+    console.log("sending push to doctor", input.doctorId, "for appointment", appointmentId);
     const { data: doc } = await sb
       .from("doctors")
       .select("profile_id")

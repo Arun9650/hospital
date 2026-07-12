@@ -32,6 +32,7 @@ export type PushPayload = { title: string; body: string; url?: string; tag?: str
 export async function sendPushToUser(userId: string, payload: PushPayload): Promise<void> {
   if (!isPushConfigured || !userId) return;
   try {
+    console.log("🚀 ~ sendPushToUser ~ userId:", userId, "payload:", payload)
     ensureVapid();
     const sb = createPublicClient();
     const { data: subs } = await sb
@@ -41,14 +42,17 @@ export async function sendPushToUser(userId: string, payload: PushPayload): Prom
     if (!subs?.length) return;
 
     const body = JSON.stringify(payload);
+    console.log("🚀 ~ sendPushToUser ~ subs:", subs, "body:", body)
     await Promise.all(
       subs.map(async (s) => {
         try {
+          console.log("🚀 ~ sendPushToUser ~ sending push to user", userId, "endpoint", s.endpoint);
           await webpush.sendNotification(
             { endpoint: String(s.endpoint), keys: { p256dh: String(s.p256dh), auth: String(s.auth) } },
             body
           );
         } catch (err) {
+          console.log("⚠️ Push delivery failed for user", userId, "endpoint", s.endpoint, err);
           // Prune subscriptions the push service has retired (410 Gone / 404).
           const code = (err as { statusCode?: number })?.statusCode;
           if (code === 410 || code === 404) {
@@ -59,5 +63,6 @@ export async function sendPushToUser(userId: string, payload: PushPayload): Prom
     );
   } catch {
     /* push failures are non-fatal */
+    console.log("⚠️ Push delivery failed for user", userId);
   }
 }
