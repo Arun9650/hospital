@@ -1,12 +1,13 @@
 import Link from "next/link";
 import { Appointment, getDoctor } from "@/lib/data";
 import { Avatar, Badge, Button } from "./ui";
+import { Icon, type IconName } from "./Icon";
 
-const modeIcon: Record<string, string> = {
-  Video: "🎥",
-  Audio: "📞",
-  Chat: "💬",
-  "In-person": "🏥",
+const modeIcon: Record<Appointment["mode"], IconName> = {
+  Video: "video",
+  Audio: "phone",
+  Chat: "chat",
+  "In-person": "hospital",
 };
 
 const statusTone: Record<Appointment["status"], "green" | "blue" | "amber" | "red"> = {
@@ -25,7 +26,7 @@ export function AppointmentCard({
 }) {
   const doc = getDoctor(appt.doctorId);
   return (
-    <div className="card-flat flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
+    <div className="card-flat lift flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
       <div className="flex items-center gap-4">
         <Avatar
           initials={doc?.initials ?? appt.doctorName.slice(0, 2)}
@@ -40,8 +41,9 @@ export function AppointmentCard({
             <Badge tone={statusTone[appt.status]}>{appt.status}</Badge>
           </div>
           <p className="text-sm text-mute">{appt.specialty}</p>
-          <p className="mt-1 text-sm text-charcoal">
-            {modeIcon[appt.mode]} {appt.mode} · {appt.date} · {appt.time}
+          <p className="mt-1 flex items-center gap-1.5 text-sm text-charcoal">
+            <Icon name={modeIcon[appt.mode]} size={15} className="text-mute" />
+            {appt.mode} · {appt.date} · {appt.time}
           </p>
           <p className="mt-0.5 text-xs text-mute">{appt.reason}</p>
         </div>

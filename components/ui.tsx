@@ -197,6 +197,39 @@ export function Field({
   );
 }
 
+export function EmptyState({
+  title,
+  body,
+  action,
+  icon,
+}: {
+  title: string;
+  body?: string;
+  action?: ReactNode;
+  icon?: ReactNode;
+}) {
+  return (
+    <div className="animate-fade-in flex flex-col items-center justify-center gap-3 py-14 text-center">
+      <div className="flex h-14 w-14 items-center justify-center rounded-full bg-surface-soft text-mute">
+        {icon ?? (
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+            <path
+              d="M7 3v4M17 3v4M3 9h18M5 5h14a2 2 0 012 2v12a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2z"
+              stroke="currentColor"
+              strokeWidth="1.7"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        )}
+      </div>
+      <p className="font-display text-lg font-light tracking-tight">{title}</p>
+      {body && <p className="max-w-sm text-sm text-mute">{body}</p>}
+      {action && <div className="mt-1">{action}</div>}
+    </div>
+  );
+}
+
 export function IconDot({ children }: { children: ReactNode }) {
   return (
     <span className="flex h-11 w-11 items-center justify-center rounded-full bg-[#eaf3fc] text-lg">

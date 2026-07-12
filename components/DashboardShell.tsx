@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { ReactNode, useState } from "react";
 import { Logo } from "./Logo";
 import { Avatar } from "./ui";
+import { Icon } from "./Icon";
 import { signOut } from "@/lib/actions/auth";
 
 export type NavItem = { href: string; label: string; icon: ReactNode };
@@ -102,16 +103,16 @@ export function DashboardShell({
           <div className="shrink-0 space-y-1 border-t border-[#e7e7e7] p-4">
             <Link
               href="/"
-              className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-mute hover:bg-surface-soft"
+              className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-mute transition-colors hover:bg-surface-soft"
             >
-              <span aria-hidden>←</span> Back to site
+              <Icon name="arrow-left" size={18} /> Back to site
             </Link>
             <form action={signOut}>
               <button
                 type="submit"
-                className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-mute hover:bg-surface-soft"
+                className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-mute transition-colors hover:bg-surface-soft"
               >
-                <span aria-hidden>⇥</span> Sign out
+                <Icon name="logout" size={18} /> Sign out
               </button>
             </form>
           </div>
@@ -124,8 +125,12 @@ export function DashboardShell({
           />
         )}
 
-        {/* Main */}
-        <main className="min-w-0 flex-1 p-4 sm:p-6 lg:p-8">{children}</main>
+        {/* Main — re-keyed per route so each navigation fades in. */}
+        <main className="min-w-0 flex-1 p-4 sm:p-6 lg:p-8">
+          <div key={pathname} className="page-enter">
+            {children}
+          </div>
+        </main>
       </div>
     </div>
   );

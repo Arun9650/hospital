@@ -4,8 +4,10 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { Avatar } from "@/components/ui";
+import { Icon } from "@/components/Icon";
 import { Logo } from "@/components/Logo";
 import { createClient } from "@/lib/supabase/client";
+import { updateAppointmentStatus } from "@/lib/actions/data";
 
 export type RoomUser = {
   role: "patient" | "doctor";
@@ -20,9 +22,27 @@ type Signal =
   | { from: string; kind: "offer" | "answer"; sdp: RTCSessionDescriptionInit }
   | { from: string; kind: "ice"; candidate: RTCIceCandidateInit };
 
+// STUN discovers each peer's public address; TURN relays media when a direct
+// path can't be found (symmetric NAT / restrictive firewalls) — without a TURN
+// server ~15-20% of real-world calls silently fail to connect. The relay
+// credentials below are Open Relay's free public TURN service.
 const ICE_SERVERS: RTCIceServer[] = [
   { urls: ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302"] },
+  {
+    urls: [
+      "turn:openrelay.metered.ca:80",
+      "turn:openrelay.metered.ca:443",
+      "turn:openrelay.metered.ca:443?transport=tcp",
+    ],
+    username: "openrelayproject",
+    credential: "openrelayproject",
+  },
 ];
+
+// Verbose WebRTC tracing is noisy in production; keep it behind an opt-in flag
+// (set localStorage.rtcDebug = "1" to enable while debugging a call).
+const RTC_DEBUG =
+  typeof window !== "undefined" && window.localStorage?.getItem("rtcDebug") === "1";
 
 function clock() {
   return new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
@@ -55,6 +75,7 @@ export function ConsultationRoom({
     "init"
   );
   const [remoteActive, setRemoteActive] = useState(false);
+  const [remoteEnded, setRemoteEnded] = useState(false);
   const [mediaError, setMediaError] = useState(false);
   const [channelError, setChannelError] = useState(false);
   const [muted, setMuted] = useState(false);
@@ -84,8 +105,8 @@ export function ConsultationRoom({
     let cancelled = false;
 
     const tag = `[RTC ${me.role} ${clientId.slice(0, 6)}]`;
-    const log = (...args: unknown[]) => console.log(tag, ...args);
-    const warn = (...args: unknown[]) => console.warn(tag, ...args);
+    const log = (...args: unknown[]) => RTC_DEBUG && console.log(tag, ...args);
+    const warn = (...args: unknown[]) => RTC_DEBUG && console.warn(tag, ...args);
     log("room mount", { roomId, configured, me });
 
     function send(event: "signal" | "chat", payload: unknown) {
@@ -306,6 +327,13 @@ export function ConsultationRoom({
         const p = payload as ChatLine;
         setChat((c) => (c.some((m) => m.id === p.id) ? c : [...c, p]));
       });
+      // The other party hung up — tear down locally and reflect it in the UI.
+      channel.on("broadcast", { event: "end" }, () => {
+        log("↓ remote ended the call");
+        setRemoteEnded(true);
+        setRemoteActive(false);
+        setStatus("ended");
+      });
       channel.on("presence", { event: "sync" }, () => {
         const ids = Object.keys(channel.presenceState());
         const others = ids.filter((id) => id !== clientId);
@@ -388,9 +416,14 @@ export function ConsultationRoom({
   }
 
   function endCall() {
+    // Let the other party know so their screen doesn't sit on "waiting".
+    channelRef.current?.send({ type: "broadcast", event: "end", payload: { from: clientId } });
     pcRef.current?.close();
     localStream.current?.getTracks().forEach((t) => t.stop());
     setStatus("ended");
+    // A finished consultation moves out of the active list into "Completed".
+    // Fire-and-forget: it's a no-op in mock mode and must not block the exit.
+    if (configured) void updateAppointmentStatus(roomId, "Completed");
     router.push(exitHref);
   }
 
@@ -438,24 +471,40 @@ export function ConsultationRoom({
               className={`h-full w-full object-cover ${remoteActive ? "" : "hidden"}`}
             />
             {!remoteActive && (
-              <div className="text-center">
+              <div className="animate-[rise_0.4s_ease] text-center">
                 <div className="mx-auto flex h-28 w-28 items-center justify-center rounded-full bg-white/5">
-                  <span className="h-3 w-3 animate-ping rounded-full bg-white/40" />
+                  {remoteEnded ? (
+                    <Icon name="phone-off" size={34} className="text-white/50" />
+                  ) : (
+                    <span className="h-3 w-3 animate-ping rounded-full bg-white/40" />
+                  )}
                 </div>
                 <p className="mt-4 font-display text-2xl font-light capitalize">
-                  {channelError
+                  {remoteEnded
+                    ? "Call ended"
+                    : channelError
                     ? "Can't reach the room"
                     : status === "connecting"
                     ? "Connecting…"
                     : `Waiting for the ${other}`}
                 </p>
                 <p className="text-sm text-white/50">
-                  {channelError
+                  {remoteEnded
+                    ? `The ${other} left the consultation. You can leave the room too.`
+                    : channelError
                     ? "The live connection couldn't be established. Check your network and refresh to try again."
                     : configured
                     ? "The room is live — they'll appear here as soon as they join."
                     : "Live calls need the connected backend. Chat works locally."}
                 </p>
+                {remoteEnded && (
+                  <button
+                    onClick={endCall}
+                    className="mt-5 rounded-full bg-white/15 px-6 py-2.5 text-sm font-semibold text-white transition hover:bg-white/25"
+                  >
+                    Leave room
+                  </button>
+                )}
               </div>
             )}
 
@@ -478,16 +527,16 @@ export function ConsultationRoom({
           {/* Controls */}
           <div className="mt-4 flex items-center justify-center gap-3">
             <Ctrl active={!muted} onClick={toggleMute} label={muted ? "Unmute" : "Mute"}>
-              {muted ? "🔇" : "🎙️"}
+              <Icon name={muted ? "mic-off" : "mic"} size={20} />
             </Ctrl>
-            <Ctrl active={!camOff} onClick={toggleCam} label={camOff ? "Camera on" : "Camera off"}>
-              {camOff ? "📷" : "🎥"}
+            <Ctrl active={!camOff} onClick={toggleCam} label={camOff ? "Turn camera on" : "Turn camera off"}>
+              <Icon name={camOff ? "video-off" : "video"} size={20} />
             </Ctrl>
             <button
               onClick={endCall}
-              className="flex h-12 items-center gap-2 rounded-full bg-warning px-6 font-semibold text-white"
+              className="flex h-12 items-center gap-2 rounded-full bg-warning px-6 font-semibold text-white transition-transform hover:scale-[1.03] active:scale-95"
             >
-              ✕ End call
+              <Icon name="phone-off" size={18} /> End call
             </button>
           </div>
         </div>
@@ -524,7 +573,13 @@ export function ConsultationRoom({
               placeholder="Type a message…"
               className="min-w-0 flex-1 rounded-full bg-white/10 px-4 py-2.5 text-sm text-white outline-none placeholder:text-white/40"
             />
-            <button className="flex h-10 w-10 items-center justify-center rounded-full bg-ps">➤</button>
+            <button
+              type="submit"
+              aria-label="Send message"
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-ps text-white transition-transform hover:scale-105 active:scale-95"
+            >
+              <Icon name="send" size={16} />
+            </button>
           </form>
         </aside>
       </div>

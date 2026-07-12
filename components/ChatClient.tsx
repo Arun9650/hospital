@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Avatar } from "@/components/ui";
+import { Icon } from "@/components/Icon";
 import { createClient } from "@/lib/supabase/client";
 import { sendChatMessage } from "@/lib/actions/data";
 import { currentPatient, getDoctor } from "@/lib/data";
@@ -322,10 +323,10 @@ export function ChatClient({
             <button
               type="submit"
               disabled={!draft.trim()}
-              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-ps text-white disabled:opacity-40"
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-ps text-white transition-transform hover:scale-105 active:scale-95 disabled:opacity-40 disabled:hover:scale-100"
               aria-label="Send message"
             >
-              ➤
+              <Icon name="send" size={17} />
             </button>
           </form>
         </div>
