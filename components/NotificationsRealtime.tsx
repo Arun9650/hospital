@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { NotificationsView } from "./NotificationsView";
 import { createClient } from "@/lib/supabase/client";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
@@ -42,13 +43,34 @@ function mapRow(r: NotificationRow): NotificationItem {
   };
 }
 
+/* Where each notification kind takes you when clicked, per inbox. Appointment
+   notices land on the list that holds the appointment, prescriptions on the Rx
+   page, and so on. */
+const ROUTES: Record<"patient" | "doctor", Record<NotificationItem["kind"], string>> = {
+  patient: {
+    appointment: "/patient/appointments",
+    prescription: "/patient/prescriptions",
+    payment: "/patient/appointments",
+    system: "/patient/dashboard",
+  },
+  doctor: {
+    appointment: "/doctor/appointments",
+    prescription: "/doctor/prescriptions",
+    payment: "/doctor/earnings",
+    system: "/doctor/dashboard",
+  },
+};
+
 export function NotificationsRealtime({
   initial,
   userId,
+  perspective = "patient",
 }: {
   initial: NotificationItem[];
   userId?: string;
+  perspective?: "patient" | "doctor";
 }) {
+  const router = useRouter();
   const [items, setItems] = useState<NotificationItem[]>(initial);
   // A ticking clock (null until mounted) so relative times stay fresh without
   // reading the clock during render. Until it's set we show the server-computed
@@ -105,13 +127,15 @@ export function NotificationsRealtime({
     setMarking(false);
   }
 
-  function markOne(id: string) {
-    setItems((prev) => {
-      const target = prev.find((n) => n.id === id);
-      if (!target || !target.unread) return prev; // already read — no write
+  // Clicking a notification marks it read AND opens the page it's about.
+  function handleClick(id: string) {
+    const target = items.find((n) => n.id === id);
+    if (target?.unread) {
+      setItems((prev) => prev.map((n) => (n.id === id ? { ...n, unread: false } : n)));
       markNotificationsRead([id]);
-      return prev.map((n) => (n.id === id ? { ...n, unread: false } : n));
-    });
+    }
+    const href = ROUTES[perspective][target?.kind ?? "system"];
+    if (href) router.push(href);
   }
 
   return (
@@ -128,7 +152,7 @@ export function NotificationsRealtime({
           Mark all as read
         </button>
       </div>
-      <NotificationsView items={view} onItemClick={markOne} />
+      <NotificationsView items={view} onItemClick={handleClick} />
     </>
   );
 }

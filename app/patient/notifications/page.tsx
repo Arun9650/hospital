@@ -15,7 +15,7 @@ export default async function PatientNotifications() {
         subtitle="Your appointments, prescriptions and account updates."
         action={<PushSubscribe />}
       />
-      <NotificationsRealtime initial={notifications} userId={userId} />
+      <NotificationsRealtime initial={notifications} userId={userId} perspective="patient" />
     </PatientShell>
   );
 }

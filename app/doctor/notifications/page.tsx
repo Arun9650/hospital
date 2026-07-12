@@ -15,7 +15,7 @@ export default async function DoctorNotifications() {
         subtitle="Requests, confirmations and account updates."
         action={<PushSubscribe />}
       />
-      <NotificationsRealtime initial={notifications} userId={userId} />
+      <NotificationsRealtime initial={notifications} userId={userId} perspective="doctor" />
     </DoctorShell>
   );
 }
