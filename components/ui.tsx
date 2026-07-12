@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { ReactNode } from "react";
+import { LinkPending } from "./LinkPending";
 
 /* -------------------------------------------------------------------------
    Small, reusable primitives shared across the whole product.
@@ -133,6 +134,7 @@ export function Button({
     return (
       <Link href={href} className={cls} aria-disabled={disabled || undefined}>
         {children}
+        <LinkPending size={size === "sm" ? 15 : 17} />
       </Link>
     );
   }

@@ -1,6 +1,7 @@
 import { PatientShell } from "@/components/roleShells";
 import { PageHeader } from "@/components/DashboardShell";
 import { NotificationsView } from "@/components/NotificationsView";
+import { PushSubscribe } from "@/components/PushSubscribe";
 import { getNotifications } from "@/lib/db";
 import { getUserId } from "@/lib/auth";
 
@@ -13,7 +14,12 @@ export default async function PatientNotifications() {
       <PageHeader
         title="Notifications"
         subtitle={`${unread} unread updates`}
-        action={<button className="btn btn-light btn-sm">Mark all as read</button>}
+        action={
+          <div className="flex items-center gap-2">
+            <PushSubscribe />
+            <button className="btn btn-light btn-sm">Mark all as read</button>
+          </div>
+        }
       />
       <NotificationsView items={notifications} />
     </PatientShell>

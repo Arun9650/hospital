@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { AuthShell } from "@/components/AuthShell";
 import { Button, Field } from "@/components/ui";
+import { SubmitButton } from "@/components/SubmitButton";
 import { Pills } from "@/components/Tabs";
 import { specialties } from "@/lib/data";
 import { signUpDoctor } from "@/lib/actions/auth";
@@ -161,9 +162,7 @@ export default function DoctorRegister() {
               <li className="flex items-center justify-between"><span>Documents uploaded</span><span className="font-medium">{files.length} files</span></li>
               <li className="flex items-center justify-between"><span>Status</span><span className="badge badge-amber">Pending review</span></li>
             </ul>
-            <Button type="submit" full>
-              Go to dashboard
-            </Button>
+            <SubmitButton full>Go to dashboard</SubmitButton>
           </form>
         )}
       </div>

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { DoctorShell } from "@/components/roleShells";
 import { PageHeader } from "@/components/DashboardShell";
 import { Badge, Button } from "@/components/ui";
+import { useToast } from "@/components/Toast";
 import { saveAvailability } from "@/lib/actions/data";
 
 const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
@@ -23,6 +24,18 @@ export default function AvailabilityPage() {
   const [state, setState] = useState(defaultState);
   const [active, setActive] = useState("Monday");
   const [mode, setMode] = useState<Record<string, boolean>>({ Video: true, Audio: true, Chat: true, "In-person": false });
+  const [saving, setSaving] = useState(false);
+  const { show } = useToast();
+
+  async function handleSave() {
+    setSaving(true);
+    const res = await saveAvailability(
+      "dr-anaya-rao",
+      days.map((d) => ({ day: d, enabled: state[d].on, slots: state[d].slots }))
+    );
+    setSaving(false);
+    show(res.ok ? "Availability saved." : "Couldn't save availability.", res.ok ? "success" : "error");
+  }
 
   function toggleDay(d: string) {
     setState((s) => ({ ...s, [d]: { ...s[d], on: !s[d].on } }));
@@ -41,7 +54,7 @@ export default function AvailabilityPage() {
       <PageHeader
         title="Availability"
         subtitle="Set your consulting hours and modes."
-        action={<Button>Save changes</Button>}
+        action={<Button loading={saving} onClick={handleSave}>Save changes</Button>}
       />
 
       <div className="grid gap-6 lg:grid-cols-[1fr_320px]">

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { AuthShell } from "@/components/AuthShell";
 import { Button, Field } from "@/components/ui";
+import { SubmitButton } from "@/components/SubmitButton";
 import { Pills } from "@/components/Tabs";
 import { signUpPatient } from "@/lib/actions/auth";
 
@@ -128,9 +129,7 @@ export default function RegisterPage() {
               <Button variant="light" onClick={() => setStep(1)} className="flex-1">
                 Back
               </Button>
-              <Button type="submit" className="flex-1">
-                Finish & enter
-              </Button>
+              <SubmitButton className="flex-1">Finish & enter</SubmitButton>
             </div>
           </form>
         </>

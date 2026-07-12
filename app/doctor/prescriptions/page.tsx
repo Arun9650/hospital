@@ -4,6 +4,7 @@ import { useState } from "react";
 import { DoctorShell } from "@/components/roleShells";
 import { PageHeader } from "@/components/DashboardShell";
 import { Avatar, Badge, Button } from "@/components/ui";
+import { useToast } from "@/components/Toast";
 import { issuePrescription } from "@/lib/actions/data";
 
 type Med = { name: string; dose: string; frequency: string; duration: string };
@@ -19,9 +20,12 @@ export default function PrescriptionBuilder() {
   const [tests, setTests] = useState<string[]>(["Lipid Profile", "ECG"]);
   const [notes, setNotes] = useState("Reduce salt, 30 min walk daily. Follow-up in 4 weeks.");
   const [issued, setIssued] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const { show } = useToast();
 
   async function handleIssue() {
-    await issuePrescription({
+    setSaving(true);
+    const res = await issuePrescription({
       doctorName: "Dr. Anaya Rao",
       specialty: "Cardiology",
       diagnosis,
@@ -29,7 +33,13 @@ export default function PrescriptionBuilder() {
       tests,
       notes,
     });
-    setIssued(true);
+    setSaving(false);
+    if (res.ok) {
+      setIssued(true);
+      show("Prescription issued & sent to the patient.", "success");
+    } else {
+      show("Couldn't issue the prescription. Please try again.", "error");
+    }
   }
 
   function addMed() {
@@ -158,8 +168,8 @@ export default function PrescriptionBuilder() {
                 </div>
               ) : (
                 <div className="flex gap-2">
-                  <Button variant="light" size="sm" className="flex-1">Save draft</Button>
-                  <Button size="sm" className="flex-1" onClick={handleIssue}>Issue Rx</Button>
+                  <Button variant="light" size="sm" className="flex-1" disabled={saving}>Save draft</Button>
+                  <Button size="sm" className="flex-1" loading={saving} onClick={handleIssue}>Issue Rx</Button>
                 </div>
               )}
             </div>

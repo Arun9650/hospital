@@ -237,6 +237,7 @@ export async function updateAppointmentStatus(
           ? `${doctor} accepted your consultation request.`
           : `${doctor} is unavailable for the requested slot. Please pick another time.`,
         kind: "appointment",
+        url: "/patient/notifications",
       });
     }
     return { ok: true };
@@ -278,6 +279,7 @@ export async function issuePrescription(input: {
           input.diagnosis ? ` for ${input.diagnosis}` : ""
         }.`,
         kind: "prescription",
+        url: "/patient/prescriptions",
       });
     }
     return { ok: true };

@@ -92,7 +92,7 @@ export function BookingWizardClient({ doctor }: { doctor: Doctor }) {
       </div>
 
       <div className="mt-6 grid gap-6 lg:grid-cols-[1fr_320px]">
-        <div className="card-flat p-6">
+        <div className="card-flat min-w-0 p-6">
           {step === 0 && (
             <div>
               <h2 className="font-display text-xl font-normal">How would you like to consult?</h2>
@@ -211,7 +211,7 @@ export function BookingWizardClient({ doctor }: { doctor: Doctor }) {
                 Continue
               </Button>
             ) : (
-              <Button onClick={handleConfirm} disabled={saving}>
+              <Button onClick={handleConfirm} loading={saving}>
                 {saving ? "Processing…" : `Pay $${doctor.fee} & confirm`}
               </Button>
             )}

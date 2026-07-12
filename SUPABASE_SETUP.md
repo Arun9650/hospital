@@ -26,6 +26,26 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOi...
 The app auto-detects real keys (placeholder values like `your-project-url` are
 ignored) and flips from mock data to live Supabase.
 
+### Optional: push notifications (VAPID)
+
+Web Push (e.g. a doctor's phone buzzing when a patient books) is off until you
+add a VAPID keypair. Generate one:
+
+```bash
+npx web-push generate-vapid-keys
+```
+
+```env
+NEXT_PUBLIC_VAPID_PUBLIC_KEY=BON...          # exposed to the browser
+VAPID_PRIVATE_KEY=xxxxxxxx                    # server-only, keep secret
+VAPID_SUBJECT=mailto:you@yourdomain.com       # contact for push services (optional)
+```
+
+Push also needs the `push_subscriptions` table (migration `0005_push.sql`) and a
+**production build served over HTTPS** — service workers and the Push API don't
+run under `pnpm dev`. Without the keys the "Enable push notifications" button
+simply hides and in-app notifications still work.
+
 ## 3. Create the schema
 
 Open the **SQL Editor** in Supabase and run, in order:
@@ -34,9 +54,10 @@ Open the **SQL Editor** in Supabase and run, in order:
 2. `supabase/migrations/0002_chat.sql` — chat tables, RLS, and realtime publication.
 3. `supabase/migrations/0003_patients.sql` — the doctor's `patients` table and RLS.
 4. `supabase/migrations/0004_notifications.sql` — timestamp so new notifications sort first.
-5. `supabase/seed.sql` — demo specialties, doctors, reviews, appointments, etc.
-6. `supabase/seed_chat.sql` — demo chat threads & messages.
-7. `supabase/seed_patients.sql` — demo patient records for Dr. Anaya Rao's panel.
+5. `supabase/migrations/0005_push.sql` — `push_subscriptions` table for Web Push.
+6. `supabase/seed.sql` — demo specialties, doctors, reviews, appointments, etc.
+7. `supabase/seed_chat.sql` — demo chat threads & messages.
+8. `supabase/seed_patients.sql` — demo patient records for Dr. Anaya Rao's panel.
 
 (Or, with the Supabase CLI: `supabase db push` then run the seed files.)
 
