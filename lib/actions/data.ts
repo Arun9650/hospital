@@ -11,11 +11,19 @@ type NotificationKind = "appointment" | "prescription" | "payment" | "system";
 
 type ServerClient = Awaited<ReturnType<typeof createServerSupabase>>;
 
-/* Insert one notification row. `userId` null => a global demo notification
-   visible to everyone (used when a seed doctor has no linked auth profile). */
+/* Insert one notification row AND, when it targets a specific user, deliver it
+   to their subscribed devices via Web Push. `userId` null => a global demo
+   notification visible to everyone (used when a seed doctor has no linked auth
+   profile); global rows can't be pushed since there's no device to target. */
 async function notify(
   sb: ServerClient,
-  n: { userId?: string | null; title: string; body: string; kind: NotificationKind }
+  n: {
+    userId?: string | null;
+    title: string;
+    body: string;
+    kind: NotificationKind;
+    url?: string;
+  }
 ) {
   await sb.from("notifications").insert({
     id: crypto.randomUUID(),
@@ -26,6 +34,15 @@ async function notify(
     kind: n.kind,
     unread: true,
   });
+
+  if (n.userId) {
+    await sendPushToUser(n.userId, {
+      title: n.title,
+      body: n.body,
+      url: n.url,
+      tag: n.kind,
+    });
+  }
 }
 
 /* General-purpose notification write, usable anywhere in the app. No-ops in
@@ -35,6 +52,7 @@ export async function createNotification(input: {
   title: string;
   body: string;
   kind: NotificationKind;
+  url?: string;
 }): Promise<Result> {
   if (!isSupabaseConfigured) return { ok: true };
   try {
@@ -115,6 +133,7 @@ export async function createAppointment(input: {
       title: "New appointment request",
       body: `${patientName} booked a ${input.mode} consultation for ${input.date} at ${input.time}.`,
       kind: "appointment",
+      url: "/doctor/notifications",
     });
 
     return { ok: true, id: String(data.id) };
