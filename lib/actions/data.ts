@@ -3,6 +3,7 @@
 import { createServerSupabase } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
 import { shortTime } from "@/lib/db";
+import { sendPushToUser } from "@/lib/push/send";
 
 type Result = { ok: boolean };
 

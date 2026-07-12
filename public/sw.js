@@ -1,6 +1,6 @@
-/* Aria Health service worker — offline support + runtime caching.
+/* Aria Health service worker — offline support + runtime caching + push.
    Bump CACHE when precached assets change to force an update. */
-const CACHE = "aria-health-v2";
+const CACHE = "aria-health-v3";
 const OFFLINE_URL = "/offline.html";
 const PRECACHE = [OFFLINE_URL, "/icons/icon-192.png", "/manifest.webmanifest"];
 
@@ -61,4 +61,44 @@ self.addEventListener("fetch", (event) => {
       })
     );
   }
+});
+
+/* ---- Push notifications --------------------------------------------------
+   The server sends a JSON payload { title, body, url, tag }. Show it as a
+   system notification so it reaches the device even when the app is closed. */
+self.addEventListener("push", (event) => {
+  let data = {};
+  try {
+    data = event.data ? event.data.json() : {};
+  } catch {
+    data = { body: event.data && event.data.text() };
+  }
+
+  const title = data.title || "Aria Health";
+  const options = {
+    body: data.body || "",
+    icon: "/icons/icon-192.png",
+    badge: "/icons/icon-192.png",
+    tag: data.tag,
+    data: { url: data.url || "/" },
+  };
+
+  event.waitUntil(self.registration.showNotification(title, options));
+});
+
+/* Focus an existing tab on the target route, or open a new one. */
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const target = (event.notification.data && event.notification.data.url) || "/";
+
+  event.waitUntil(
+    self.clients
+      .matchAll({ type: "window", includeUncontrolled: true })
+      .then((clients) => {
+        for (const client of clients) {
+          if (client.url.includes(target) && "focus" in client) return client.focus();
+        }
+        if (self.clients.openWindow) return self.clients.openWindow(target);
+      })
+  );
 });
