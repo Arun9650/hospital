@@ -40,12 +40,22 @@ export async function updateSession(request: NextRequest) {
     },
   });
 
-  // Touch the user to trigger a token refresh when needed.
+  // Touch the user to trigger a token refresh when needed. When this rotates the
+  // token, the new session cookies are written onto `response` via setAll above.
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
   const { pathname } = request.nextUrl;
+
+  // A redirect must carry over any session cookies the refresh just set on
+  // `response`; a bare NextResponse.redirect() would drop the rotated auth
+  // cookie and silently sign the user out on their next request.
+  const redirect = (url: URL) => {
+    const res = NextResponse.redirect(url);
+    response.cookies.getAll().forEach((cookie) => res.cookies.set(cookie));
+    return res;
+  };
 
   // The shared consultation room is open to any signed-in user (patient OR
   // doctor), so it isn't tied to a single role area.
@@ -53,7 +63,7 @@ export async function updateSession(request: NextRequest) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     url.searchParams.set("next", pathname);
-    return NextResponse.redirect(url);
+    return redirect(url);
   }
 
   const area = ROLE_AREAS.find(
@@ -66,7 +76,7 @@ export async function updateSession(request: NextRequest) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     url.searchParams.set("next", pathname);
-    return NextResponse.redirect(url);
+    return redirect(url);
   }
 
   // Signed in but wrong role for this area → bounce to their own home.
@@ -77,7 +87,7 @@ export async function updateSession(request: NextRequest) {
       const url = request.nextUrl.clone();
       url.pathname = home;
       url.search = "";
-      return NextResponse.redirect(url);
+      return redirect(url);
     }
   }
 
@@ -88,7 +98,7 @@ export async function updateSession(request: NextRequest) {
     const url = request.nextUrl.clone();
     url.pathname = home;
     url.search = "";
-    return NextResponse.redirect(url);
+    return redirect(url);
   }
 
   return response;

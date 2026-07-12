@@ -185,7 +185,10 @@ export async function signUpDoctor(formData: FormData) {
 export async function signOut() {
   if (isSupabaseConfigured) {
     const sb = await createServerSupabase();
-    await sb.auth.signOut();
+    // Local scope: sign out only THIS device. The default ("global") revokes the
+    // user's refresh tokens on every device, which would log them out of their
+    // other phones/laptops too.
+    await sb.auth.signOut({ scope: "local" });
   }
   redirect("/");
 }
