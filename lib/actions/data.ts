@@ -458,14 +458,31 @@ export async function saveAvailability(
   days: { day: string; enabled: boolean; slots: string[] }[]
 ): Promise<Result> {
   if (!isSupabaseConfigured) return { ok: true };
+  if (!doctorId) {
+    console.error("[availability] missing doctorId — cannot save");
+    return { ok: false };
+  }
   try {
     const sb = await createServerSupabase();
-    await sb.from("availability").upsert(
+    // NB: the Supabase client returns errors in the result object rather than
+    // throwing, so we MUST inspect `error` — otherwise a rejected write (e.g. a
+    // foreign-key violation from a stale doctorId, or RLS) is reported as a
+    // silent success and nothing actually persists.
+    const { error } = await sb.from("availability").upsert(
       days.map((d) => ({ doctor_id: doctorId, day: d.day, enabled: d.enabled, slots: d.slots })),
       { onConflict: "doctor_id,day" }
     );
+    if (error) {
+      console.error("[availability] upsert failed", {
+        doctorId,
+        message: error.message,
+        code: error.code,
+      });
+      return { ok: false };
+    }
     return { ok: true };
-  } catch {
+  } catch (err) {
+    console.error("[availability] unexpected error", err);
     return { ok: false };
   }
 }

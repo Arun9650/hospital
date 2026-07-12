@@ -329,6 +329,29 @@ export async function getCurrentDoctor(): Promise<Doctor | undefined> {
   }
 }
 
+export type AvailabilityDay = { day: string; enabled: boolean; slots: string[] };
+
+/** A doctor's saved weekly availability. Empty array => nothing saved yet
+ *  (the editor falls back to sensible defaults). */
+export async function getDoctorAvailability(doctorId: string): Promise<AvailabilityDay[]> {
+  if (!isSupabaseConfigured || !doctorId) return [];
+  try {
+    const sb = createPublicClient();
+    const { data, error } = await sb
+      .from("availability")
+      .select("day, enabled, slots")
+      .eq("doctor_id", doctorId);
+    if (error || !data?.length) return [];
+    return data.map((r) => ({
+      day: String(r.day),
+      enabled: Boolean(r.enabled),
+      slots: Array.isArray(r.slots) ? (r.slots as string[]) : [],
+    }));
+  } catch {
+    return [];
+  }
+}
+
 /** Incoming requests for a doctor (everything not the demo "You" patient). */
 export async function getDoctorAppointments(doctorId: string): Promise<Appointment[]> {
   if (!isSupabaseConfigured) return mock.appointmentRequests;
