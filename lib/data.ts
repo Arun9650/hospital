@@ -681,6 +681,42 @@ export const notifications: NotificationItem[] = [
   },
 ];
 
+/* ---- Doctor notifications --------------------------------------------- */
+export const doctorNotifications: NotificationItem[] = [
+  {
+    id: "dn1",
+    title: "New appointment request",
+    body: "Rohan Mehta booked a Video consultation for Today at 4:30 PM.",
+    time: "5 min ago",
+    kind: "appointment",
+    unread: true,
+  },
+  {
+    id: "dn2",
+    title: "New appointment request",
+    body: "Grace Lin booked an Audio consultation for Today at 5:15 PM.",
+    time: "40 min ago",
+    kind: "appointment",
+    unread: true,
+  },
+  {
+    id: "dn3",
+    title: "Payout scheduled",
+    body: "Your weekly payout of $1,980 is scheduled for Aug 1, 2026.",
+    time: "3 hours ago",
+    kind: "payment",
+    unread: false,
+  },
+  {
+    id: "dn4",
+    title: "New 5-star review",
+    body: "A patient left a 5-star review after their cardiology consultation.",
+    time: "Yesterday",
+    kind: "system",
+    unread: false,
+  },
+];
+
 /* ---- Doctor earnings -------------------------------------------------- */
 export const earnings = {
   today: 315,

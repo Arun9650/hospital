@@ -6,6 +6,45 @@ import { shortTime } from "@/lib/db";
 
 type Result = { ok: boolean };
 
+type NotificationKind = "appointment" | "prescription" | "payment" | "system";
+
+type ServerClient = Awaited<ReturnType<typeof createServerSupabase>>;
+
+/* Insert one notification row. `userId` null => a global demo notification
+   visible to everyone (used when a seed doctor has no linked auth profile). */
+async function notify(
+  sb: ServerClient,
+  n: { userId?: string | null; title: string; body: string; kind: NotificationKind }
+) {
+  await sb.from("notifications").insert({
+    id: crypto.randomUUID(),
+    user_id: n.userId ?? null,
+    title: n.title,
+    body: n.body,
+    time_label: "Just now",
+    kind: n.kind,
+    unread: true,
+  });
+}
+
+/* General-purpose notification write, usable anywhere in the app. No-ops in
+   mock mode. */
+export async function createNotification(input: {
+  userId?: string | null;
+  title: string;
+  body: string;
+  kind: NotificationKind;
+}): Promise<Result> {
+  if (!isSupabaseConfigured) return { ok: true };
+  try {
+    const sb = await createServerSupabase();
+    await notify(sb, input);
+    return { ok: true };
+  } catch {
+    return { ok: false };
+  }
+}
+
 /* Booking → create an appointment row for the signed-in patient. */
 export async function createAppointment(input: {
   doctorId: string;
@@ -42,6 +81,7 @@ export async function createAppointment(input: {
       if (existing) return { ok: true, id: String(existing.id) };
     }
 
+    const patientName = (user?.user_metadata?.full_name as string) || "You";
     const { data, error } = await sb
       .from("appointments")
       .insert({
@@ -49,7 +89,7 @@ export async function createAppointment(input: {
         doctor_name: input.doctorName,
         specialty: input.specialty,
         patient_id: user?.id ?? null,
-        patient_name: (user?.user_metadata?.full_name as string) || "You",
+        patient_name: patientName,
         date_label: input.date,
         time_label: input.time,
         mode: input.mode,
@@ -60,6 +100,22 @@ export async function createAppointment(input: {
       .select("id")
       .single();
     if (error) return { ok: false };
+
+    // Notify the doctor of the new booking. Route it to the doctor's auth
+    // profile when they have one; otherwise leave it global (seed catalog
+    // doctors have no linked account) so it still surfaces in the demo.
+    const { data: doc } = await sb
+      .from("doctors")
+      .select("profile_id")
+      .eq("id", input.doctorId)
+      .maybeSingle();
+    await notify(sb, {
+      userId: (doc?.profile_id as string) ?? null,
+      title: "New appointment request",
+      body: `${patientName} booked a ${input.mode} consultation for ${input.date} at ${input.time}.`,
+      kind: "appointment",
+    });
+
     return { ok: true, id: String(data.id) };
   } catch {
     return { ok: false };
@@ -143,7 +199,26 @@ export async function updateAppointmentStatus(
   if (!isSupabaseConfigured) return { ok: true };
   try {
     const sb = await createServerSupabase();
-    await sb.from("appointments").update({ status }).eq("id", id);
+    const { data: appt } = await sb
+      .from("appointments")
+      .update({ status })
+      .eq("id", id)
+      .select("patient_id, doctor_name")
+      .maybeSingle();
+
+    // Let the patient know the outcome of their request.
+    if (appt?.patient_id && (status === "Upcoming" || status === "Cancelled")) {
+      const confirmed = status === "Upcoming";
+      const doctor = (appt.doctor_name as string) || "Your doctor";
+      await notify(sb, {
+        userId: appt.patient_id as string,
+        title: confirmed ? "Appointment confirmed" : "Appointment declined",
+        body: confirmed
+          ? `${doctor} accepted your consultation request.`
+          : `${doctor} is unavailable for the requested slot. Please pick another time.`,
+        kind: "appointment",
+      });
+    }
     return { ok: true };
   } catch {
     return { ok: false };
@@ -173,6 +248,18 @@ export async function issuePrescription(input: {
       tests: input.tests,
       notes: input.notes,
     });
+
+    // Notify the patient that a new prescription is available.
+    if (input.patientId) {
+      await notify(sb, {
+        userId: input.patientId,
+        title: "New prescription available",
+        body: `${input.doctorName} issued a digital prescription${
+          input.diagnosis ? ` for ${input.diagnosis}` : ""
+        }.`,
+        kind: "prescription",
+      });
+    }
     return { ok: true };
   } catch {
     return { ok: false };

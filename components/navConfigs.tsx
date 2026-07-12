@@ -47,6 +47,7 @@ export const doctorNav: NavItem[] = [
   { href: "/doctor/prescriptions", label: "Prescriptions", icon: <I d={icons.rx} /> },
   { href: "/doctor/earnings", label: "Earnings", icon: <I d={icons.wallet} /> },
   { href: "/doctor/availability", label: "Availability", icon: <I d={icons.clock} /> },
+  { href: "/doctor/notifications", label: "Notifications", icon: <I d={icons.bell} /> },
 ];
 
 export const adminNav: NavItem[] = [

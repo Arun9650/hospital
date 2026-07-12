@@ -137,7 +137,7 @@ export function DashboardShell({
 }
 
 function roleNotifications(role: string) {
-  if (role.toLowerCase().includes("doctor")) return "/doctor/dashboard";
+  if (role.toLowerCase().includes("doctor")) return "/doctor/notifications";
   if (role.toLowerCase().includes("admin")) return "/admin/notifications";
   return "/patient/notifications";
 }

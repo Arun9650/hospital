@@ -33,9 +33,10 @@ Open the **SQL Editor** in Supabase and run, in order:
 1. `supabase/migrations/0001_schema.sql` — tables, the sign-up trigger, and RLS.
 2. `supabase/migrations/0002_chat.sql` — chat tables, RLS, and realtime publication.
 3. `supabase/migrations/0003_patients.sql` — the doctor's `patients` table and RLS.
-4. `supabase/seed.sql` — demo specialties, doctors, reviews, appointments, etc.
-5. `supabase/seed_chat.sql` — demo chat threads & messages.
-6. `supabase/seed_patients.sql` — demo patient records for Dr. Anaya Rao's panel.
+4. `supabase/migrations/0004_notifications.sql` — timestamp so new notifications sort first.
+5. `supabase/seed.sql` — demo specialties, doctors, reviews, appointments, etc.
+6. `supabase/seed_chat.sql` — demo chat threads & messages.
+7. `supabase/seed_patients.sql` — demo patient records for Dr. Anaya Rao's panel.
 
 (Or, with the Supabase CLI: `supabase db push` then run the seed files.)
 

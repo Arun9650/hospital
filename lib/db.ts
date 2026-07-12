@@ -369,11 +369,33 @@ export async function getNotifications(userId?: string): Promise<NotificationIte
   try {
     const sb = createPublicClient();
     const filter = userId ? `user_id.eq.${userId},user_id.is.null` : `user_id.is.null`;
-    const { data, error } = await sb.from("notifications").select("*").or(filter);
+    const { data, error } = await sb
+      .from("notifications")
+      .select("*")
+      .or(filter)
+      .order("created_at", { ascending: false });
     if (error || !data?.length) return mock.notifications;
     return data.map(mapNotification);
   } catch {
     return mock.notifications;
+  }
+}
+
+/** Notifications for a signed-in doctor (their own + global demo rows). */
+export async function getDoctorNotifications(profileId?: string): Promise<NotificationItem[]> {
+  if (!isSupabaseConfigured) return mock.doctorNotifications;
+  try {
+    const sb = createPublicClient();
+    const filter = profileId ? `user_id.eq.${profileId},user_id.is.null` : `user_id.is.null`;
+    const { data, error } = await sb
+      .from("notifications")
+      .select("*")
+      .or(filter)
+      .order("created_at", { ascending: false });
+    if (error || !data?.length) return mock.doctorNotifications;
+    return data.map(mapNotification);
+  } catch {
+    return mock.doctorNotifications;
   }
 }
 
