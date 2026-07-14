@@ -3,8 +3,8 @@ import { notFound } from "next/navigation";
 import { PatientShell } from "@/components/roleShells";
 import { Avatar, Badge, Button, Stars, VerifiedBadge } from "@/components/ui";
 import { Tabs } from "@/components/Tabs";
-import { bookingDays } from "@/lib/data";
-import { getDoctor, getDoctors, getReviews } from "@/lib/db";
+import { getDoctor, getDoctors, getReviews, getDoctorAvailability } from "@/lib/db";
+import { buildBookingDays } from "@/lib/booking";
 
 export async function generateStaticParams() {
   const doctors = await getDoctors();
@@ -23,6 +23,7 @@ export default async function DoctorProfile({
   const docReviews = await getReviews(doctor.id);
   const allReviews = await getReviews();
   const displayReviews = docReviews.length ? docReviews : allReviews.slice(0, 3);
+  const bookingDays = buildBookingDays(await getDoctorAvailability(doctor.id));
 
   return (
     <PatientShell>
@@ -116,7 +117,9 @@ export default async function DoctorProfile({
                 },
                 {
                   label: "Availability",
-                  content: (
+                  content: bookingDays.length === 0 ? (
+                    <p className="text-sm text-mute">No open slots in the next few weeks.</p>
+                  ) : (
                     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                       {bookingDays.map((d) => (
                         <div key={d.date} className="card p-4">
@@ -157,10 +160,7 @@ export default async function DoctorProfile({
               Next: {doctor.nextSlot}
             </div>
             <div className="mt-5 space-y-2">
-              <Button href={`/patient/messages?doctor=${doctor.id}`} full>
-                💬 Message doctor
-              </Button>
-              <Button href={`/patient/book/${doctor.id}`} variant="light" full>
+              <Button href={`/patient/book/${doctor.id}`} full>
                 Book appointment
               </Button>
               <Button href="/patient/appointments" variant="ghost" full>

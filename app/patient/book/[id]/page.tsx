@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { PatientShell } from "@/components/roleShells";
 import { BookingWizardClient } from "@/components/BookingWizardClient";
-import { getDoctor } from "@/lib/db";
+import { getDoctor, getDoctorAvailability } from "@/lib/db";
+import { buildBookingDays } from "@/lib/booking";
 
 export default async function BookingPage({
   params,
@@ -10,6 +11,8 @@ export default async function BookingPage({
 }) {
   const { id } = await params;
   const doctor = await getDoctor(id);
+  const availability = doctor ? await getDoctorAvailability(doctor.id) : [];
+  const days = buildBookingDays(availability);
 
   if (!doctor) {
     return (
@@ -26,7 +29,7 @@ export default async function BookingPage({
 
   return (
     <PatientShell>
-      <BookingWizardClient doctor={doctor} />
+      <BookingWizardClient doctor={doctor} days={days} />
     </PatientShell>
   );
 }

@@ -52,7 +52,7 @@ export function AppointmentCard({
         {actions ??
           (appt.status === "Upcoming" ? (
             <>
-              <Button href={`/consultation/${appt.id}`} size="sm">
+              <Button href={`/consultation/${appt.id}?mode=${appt.mode}`} size="sm">
                 Join
               </Button>
               <Button href={`/patient/doctors/${appt.doctorId}`} variant="light" size="sm">

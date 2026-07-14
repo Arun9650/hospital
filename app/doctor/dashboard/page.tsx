@@ -89,7 +89,7 @@ export default async function DoctorDashboard() {
                       </div>
                     </div>
                     {s.status === "Upcoming" ? (
-                      <Button href={`/consultation/${s.id}`} size="sm">Start</Button>
+                      <Button href={`/consultation/${s.id}?mode=${s.mode}`} size="sm">Start</Button>
                     ) : (
                       <Badge tone="green">Done</Badge>
                     )}

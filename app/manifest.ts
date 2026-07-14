@@ -35,7 +35,6 @@ export default function manifest(): MetadataRoute.Manifest {
       },
     ],
     shortcuts: [
-      { name: "Messages", short_name: "Messages", url: "/patient/messages" },
       { name: "Find doctors", short_name: "Doctors", url: "/patient/doctors" },
       { name: "Appointments", short_name: "Appts", url: "/patient/appointments" },
     ],

@@ -3,8 +3,8 @@
 import Link from "next/link";
 import { useState } from "react";
 import { Avatar, Button, Field, Stars } from "@/components/ui";
-import { bookingDays } from "@/lib/data";
 import type { Doctor } from "@/lib/data";
+import { buildBookingDays, type BookingDay } from "@/lib/booking";
 import { createAppointment } from "@/lib/actions/data";
 import { appointmentIcs } from "@/lib/ics";
 
@@ -17,7 +17,10 @@ const modeInfo: Record<string, { icon: string; desc: string }> = {
   "In-person": { icon: "🏥", desc: "Visit the clinic" },
 };
 
-export function BookingWizardClient({ doctor }: { doctor: Doctor }) {
+export function BookingWizardClient({ doctor, days }: { doctor: Doctor; days?: BookingDay[] }) {
+  // Days come from the server with the doctor's real availability applied; fall
+  // back to generated default days if rendered without them.
+  const bookingDays = days ?? buildBookingDays();
   // Chat first: surface the chat option ahead of other modes, and preselect it.
   const orderedModes = [...doctor.modes].sort(
     (a, b) => (a === "Chat" ? -1 : 0) - (b === "Chat" ? -1 : 0)
@@ -76,6 +79,22 @@ export function BookingWizardClient({ doctor }: { doctor: Doctor }) {
         reason={reason}
         apptId={apptId}
       />
+    );
+  }
+
+  if (bookingDays.length === 0) {
+    return (
+      <>
+        <Link href={`/patient/doctors/${doctor.id}`} className="text-sm text-ps hover:underline">
+          ← Back to profile
+        </Link>
+        <div className="card-flat mt-4 p-8 text-center">
+          <h1 className="font-display text-2xl font-light">No open slots right now</h1>
+          <p className="mt-2 text-sm text-mute">
+            {doctor.name} has no available times in the next few weeks. Please check back later.
+          </p>
+        </div>
+      </>
     );
   }
 
@@ -310,7 +329,7 @@ function Confirmation({
 }: {
   doctor: Doctor;
   mode: string;
-  day: (typeof bookingDays)[number];
+  day: BookingDay;
   slot: string;
   reason: string;
   apptId?: string;
@@ -369,13 +388,9 @@ function Confirmation({
           </div>
 
           <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-center">
-            {mode === "Chat" ? (
-              <Button href={`/patient/messages?doctor=${doctor.id}`}>Open chat</Button>
-            ) : (
-              <Button href={apptId ? `/consultation/${apptId}` : "/patient/appointments"}>
-                Join consultation
-              </Button>
-            )}
+            <Button href={apptId ? `/consultation/${apptId}?mode=${mode}` : "/patient/appointments"}>
+              {mode === "Chat" ? "Open chat room" : "Join consultation"}
+            </Button>
             <Button href="/patient/appointments" variant="light">View appointments</Button>
             <Button variant="ghost" onClick={downloadIcs}>Add to calendar</Button>
           </div>

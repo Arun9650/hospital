@@ -779,15 +779,6 @@ export const adminAppointments = [
   { id: "aa5", patient: "Ahmed Farah", doctor: "Dr. Anaya Rao", date: "Tomorrow, 10:00 AM", mode: "Video", status: "Upcoming", fee: 45 },
 ];
 
-/* ---- Booking helpers -------------------------------------------------- */
-export const bookingDays = [
-  { label: "Today", date: "Jul 8", slots: ["3:15 PM", "4:30 PM", "5:45 PM", "7:00 PM"] },
-  { label: "Wed", date: "Jul 9", slots: ["9:00 AM", "10:30 AM", "1:15 PM", "4:00 PM", "6:30 PM"] },
-  { label: "Thu", date: "Jul 10", slots: ["9:30 AM", "11:00 AM", "2:00 PM"] },
-  { label: "Fri", date: "Jul 11", slots: ["10:00 AM", "12:30 PM", "3:30 PM", "5:00 PM"] },
-  { label: "Sat", date: "Jul 12", slots: ["9:00 AM", "10:00 AM", "11:30 AM"] },
-];
-
 export function getDoctor(id: string): Doctor | undefined {
   return doctors.find((d) => d.id === id);
 }

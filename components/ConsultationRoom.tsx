@@ -60,13 +60,20 @@ export function ConsultationRoom({
   me,
   exitHref,
   configured,
+  mode = "Video",
 }: {
   roomId: string;
   me: RoomUser;
   exitHref: string;
   configured: boolean;
+  mode?: "Video" | "Audio" | "Chat";
 }) {
   const router = useRouter();
+  // Audio: negotiate audio only, no camera. Chat: no media/peer at all — the
+  // room is just the realtime channel (presence + chat), opening when both join
+  // and closing when one leaves, mirroring the call lifecycle.
+  const audioOnly = mode === "Audio";
+  const chatOnly = mode === "Chat";
   const { show: showToast } = useToast();
   const clientId = useMemo(() => crypto.randomUUID(), []);
 
@@ -413,8 +420,8 @@ export function ConsultationRoom({
       }
       for (let attempt = 1; attempt <= 4; attempt++) {
         try {
-          log(`requesting camera + mic… (attempt ${attempt})`);
-          const s = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+          log(`requesting ${audioOnly ? "mic" : "camera + mic"}… (attempt ${attempt})`);
+          const s = await navigator.mediaDevices.getUserMedia({ video: !audioOnly, audio: true });
           setMediaMsg("");
           return s;
         } catch (e) {
@@ -460,31 +467,35 @@ export function ConsultationRoom({
     }
 
     (async () => {
-      // 1. Local media (fall back to chat-only if denied / unavailable).
-      const stream = await acquireMedia();
-      if (cancelled) {
-        stream?.getTracks().forEach((t) => t.stop());
-        return;
-      }
-      if (stream) {
-        localStream.current = stream;
-        log("got local media:", stream.getTracks().map((t) => `${t.kind}:${t.readyState}`));
-        if (localVideo.current) {
-          localVideo.current.srcObject = stream;
-          void localVideo.current.play().catch(() => {});
+      // Chat-only rooms skip media + WebRTC entirely — just the realtime channel
+      // below (presence + chat). Video/Audio acquire media and negotiate a peer.
+      if (!chatOnly) {
+        // 1. Local media (fall back to chat-only if denied / unavailable).
+        const stream = await acquireMedia();
+        if (cancelled) {
+          stream?.getTracks().forEach((t) => t.stop());
+          return;
         }
-      } else {
-        warn("continuing without local media (recv-only) — you can still see/hear the other side");
-        setMediaError(true);
-      }
-      if (cancelled) return;
+        if (stream) {
+          localStream.current = stream;
+          log("got local media:", stream.getTracks().map((t) => `${t.kind}:${t.readyState}`));
+          if (localVideo.current) {
+            localVideo.current.srcObject = stream;
+            void localVideo.current.play().catch(() => {});
+          }
+        } else {
+          warn("continuing without local media (recv-only) — you can still see/hear the other side");
+          setMediaError(true);
+        }
+        if (cancelled) return;
 
-      // 2. Peer connection — with fresh, server-minted ICE credentials (falls
-      //    back to the static env config if the route is unavailable).
-      iceServersRef.current = await fetchIceServers();
-      if (cancelled) return;
-      log("using ICE servers:", iceServersRef.current.length, "entries");
-      pcRef.current = newPeer();
+        // 2. Peer connection — with fresh, server-minted ICE credentials (falls
+        //    back to the static env config if the route is unavailable).
+        iceServersRef.current = await fetchIceServers();
+        if (cancelled) return;
+        log("using ICE servers:", iceServersRef.current.length, "entries");
+        pcRef.current = newPeer();
+      }
       setStatus("waiting");
 
       // 3. Signaling channel (Supabase Realtime broadcast + presence).
@@ -512,6 +523,14 @@ export function ConsultationRoom({
         const ids = Object.keys(channel.presenceState());
         const others = ids.filter((id) => id !== clientId);
         log("presence sync — peers in room:", ids.length, "others:", others.map((o) => o.slice(0, 6)));
+        // Chat room: no media to negotiate — "connected" is simply both present.
+        if (chatOnly) {
+          const present = others.length > 0;
+          setRemoteActive(present);
+          setRemoteHasVideo(false);
+          setStatus(present ? "connected" : "waiting");
+          return;
+        }
         if (others.length === 0) {
           log("  alone in room, waiting for the other party");
           stopReoffer();
@@ -739,10 +758,14 @@ export function ConsultationRoom({
             {remoteActive && !remoteHasVideo && (
               <div className="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-br from-[#0a2540] to-[#04101f] text-center">
                 <Avatar initials={other === "doctor" ? "DR" : "PT"} color="#334155" size={96} />
-                <p className="mt-4 font-display text-xl font-light capitalize">
-                  {other}&apos;s camera is off
+                <p className="mt-4 font-display text-xl font-light">
+                  {chatOnly ? "Chat consultation" : audioOnly ? "Audio call" : `${other}'s camera is off`}
                 </p>
-                <p className="text-sm text-white/50">You&apos;re still connected — audio is live.</p>
+                <p className="text-sm text-white/50">
+                  {chatOnly
+                    ? "You're connected — send a message in the panel."
+                    : "You're still connected — audio is live."}
+                </p>
               </div>
             )}
             {remoteActive && needsAudioUnlock && (
@@ -828,9 +851,9 @@ export function ConsultationRoom({
                 autoPlay
                 playsInline
                 muted
-                className={`h-full w-full object-cover ${camOff || mediaError ? "hidden" : ""}`}
+                className={`h-full w-full object-cover ${camOff || mediaError || mode !== "Video" ? "hidden" : ""}`}
               />
-              {(camOff || mediaError) && (
+              {(camOff || mediaError || mode !== "Video") && (
                 <Avatar initials={me.initials} color={me.color} size={54} />
               )}
               <span className="absolute bottom-1.5 left-2 text-[11px] text-white/70">You</span>
@@ -839,12 +862,16 @@ export function ConsultationRoom({
 
           {/* Controls */}
           <div className="mt-4 flex items-center justify-center gap-3">
-            <Ctrl active={!muted} onClick={toggleMute} label={muted ? "Unmute" : "Mute"}>
-              <Icon name={muted ? "mic-off" : "mic"} size={20} />
-            </Ctrl>
-            <Ctrl active={!camOff} onClick={toggleCam} label={camOff ? "Turn camera on" : "Turn camera off"}>
-              <Icon name={camOff ? "video-off" : "video"} size={20} />
-            </Ctrl>
+            {!chatOnly && (
+              <Ctrl active={!muted} onClick={toggleMute} label={muted ? "Unmute" : "Mute"}>
+                <Icon name={muted ? "mic-off" : "mic"} size={20} />
+              </Ctrl>
+            )}
+            {mode === "Video" && (
+              <Ctrl active={!camOff} onClick={toggleCam} label={camOff ? "Turn camera on" : "Turn camera off"}>
+                <Icon name={camOff ? "video-off" : "video"} size={20} />
+              </Ctrl>
+            )}
             <button
               onClick={endCall}
               className="flex h-12 items-center gap-2 rounded-full bg-warning px-6 font-semibold text-white transition-transform hover:scale-[1.03] active:scale-95"

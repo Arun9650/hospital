@@ -1,11 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui";
 import { useToast } from "@/components/Toast";
-import { bookingDays } from "@/lib/data";
 import type { Appointment } from "@/lib/data";
+import { buildBookingDays } from "@/lib/booking";
 import { cancelMyAppointment, rescheduleAppointment } from "@/lib/actions/data";
 
 /* Cancel + reschedule for a patient's own pending/upcoming appointment.
@@ -19,6 +19,9 @@ export function PatientAppointmentActions({ appt }: { appt: Appointment }) {
   const [picking, setPicking] = useState(false);
   const [day, setDay] = useState(0);
   const [slot, setSlot] = useState("");
+  // Dynamic upcoming days (from today). Reschedule uses default slots since the
+  // per-card component doesn't carry the doctor's saved availability.
+  const days = useMemo(() => buildBookingDays(), []);
 
   async function cancel() {
     if (!confirm("Cancel this appointment? Free cancellation up to 2 hours before the slot.")) return;
@@ -36,7 +39,7 @@ export function PatientAppointmentActions({ appt }: { appt: Appointment }) {
   async function reschedule() {
     if (!slot) return;
     setBusy("reschedule");
-    const date = `${bookingDays[day].label}, ${bookingDays[day].date}`;
+    const date = `${days[day].label}, ${days[day].date}`;
     const res = await rescheduleAppointment(appt.id, date, slot);
     setBusy(null);
     if (res.ok) {
@@ -51,7 +54,7 @@ export function PatientAppointmentActions({ appt }: { appt: Appointment }) {
   return (
     <>
       {appt.status === "Upcoming" && (
-        <Button href={`/consultation/${appt.id}`} size="sm">Join</Button>
+        <Button href={`/consultation/${appt.id}?mode=${appt.mode}`} size="sm">Join</Button>
       )}
       <Button variant="light" size="sm" onClick={() => setPicking(true)} disabled={!!busy}>
         Reschedule
@@ -73,7 +76,7 @@ export function PatientAppointmentActions({ appt }: { appt: Appointment }) {
             <p className="mt-1 text-sm text-mute">Pick a new date & time with {appt.doctorName}.</p>
 
             <div className="mt-5 flex gap-2 overflow-x-auto pb-2 no-scrollbar">
-              {bookingDays.map((d, i) => (
+              {days.map((d, i) => (
                 <button
                   key={d.date}
                   onClick={() => { setDay(i); setSlot(""); }}
@@ -87,7 +90,7 @@ export function PatientAppointmentActions({ appt }: { appt: Appointment }) {
               ))}
             </div>
             <div className="mt-4 flex flex-wrap gap-2">
-              {bookingDays[day].slots.map((s) => (
+              {days[day].slots.map((s) => (
                 <button key={s} onClick={() => setSlot(s)} className={`chip ${slot === s ? "chip-active" : ""}`}>
                   {s}
                 </button>
