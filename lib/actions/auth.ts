@@ -1,9 +1,9 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { headers } from "next/headers";
 import { createServerSupabase } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
+import { getSiteOrigin } from "@/lib/siteUrl";
 import { firstError, isEmail, maxLen, minPassword, required } from "@/lib/validate";
 import { specialties } from "@/lib/data";
 
@@ -112,7 +112,11 @@ export async function resendConfirmation(formData: FormData) {
   const email = String(formData.get("email") ?? "").trim();
   if (isSupabaseConfigured && email) {
     const sb = await createServerSupabase();
-    await sb.auth.resend({ type: "signup", email });
+    await sb.auth.resend({
+      type: "signup",
+      email,
+      options: { emailRedirectTo: `${await getSiteOrigin()}/auth/callback?next=/login` },
+    });
   }
   redirect(`/login?check_email=${encodeURIComponent(email)}`);
 }
@@ -131,6 +135,9 @@ export async function signUpPatient(formData: FormData) {
       email,
       password,
       options: {
+        // Route the confirmation link through our callback at the deployed origin
+        // (not localhost). Must be allowlisted in Supabase → Auth → URL config.
+        emailRedirectTo: `${await getSiteOrigin()}/auth/callback?next=/login`,
         data: {
           full_name: fullName,
           role: "patient",
@@ -165,6 +172,7 @@ export async function signUpDoctor(formData: FormData) {
       email,
       password,
       options: {
+        emailRedirectTo: `${await getSiteOrigin()}/auth/callback?next=/login`,
         data: {
           full_name: fullName,
           role: "doctor",
@@ -208,10 +216,8 @@ export async function requestPasswordReset(formData: FormData) {
   const email = String(formData.get("email") ?? "").trim();
   if (isSupabaseConfigured && email) {
     const sb = await createServerSupabase();
-    const h = await headers();
-    const origin = `${h.get("x-forwarded-proto") ?? "http"}://${h.get("host")}`;
     await sb.auth.resetPasswordForEmail(email, {
-      redirectTo: `${origin}/auth/callback?next=/reset-password`,
+      redirectTo: `${await getSiteOrigin()}/auth/callback?next=/reset-password`,
     });
   }
   // Always report "sent" — never reveal whether an account exists for that email.
