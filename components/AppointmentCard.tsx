@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { Appointment, getDoctor } from "@/lib/data";
 import { Avatar, Badge, Button } from "./ui";
 import { Icon, type IconName } from "./Icon";
@@ -65,12 +64,13 @@ export function AppointmentCard({
               <Button href="/patient/prescriptions" variant="light" size="sm">
                 Prescription
               </Button>
-              <Link
+              <Button
                 href={`/patient/book/${appt.doctorId}`}
-                className="btn btn-ghost btn-sm"
+                variant="ghost"
+                size="sm"
               >
                 Book again
-              </Link>
+              </Button>
             </>
           ) : null)}
       </div>

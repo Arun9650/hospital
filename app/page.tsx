@@ -107,9 +107,9 @@ export default async function Home() {
               Top specialties, ready when you are
             </h2>
           </div>
-          <Link href="/patient/doctors" className="btn btn-ghost">
+          <Button href="/patient/doctors" variant="ghost">
             View all specialties →
-          </Link>
+          </Button>
         </div>
 
         <div className="mt-10 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">

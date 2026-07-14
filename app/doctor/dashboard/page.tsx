@@ -20,12 +20,17 @@ const todayStats = [
   { label: "Avg. rating", value: earnings.avgRating, sub: "512 reviews" },
 ];
 
-const schedule = [
-  { time: "9:00 AM", patient: "Rohan Mehta", type: "Video", status: "Completed" },
-  { time: "10:30 AM", patient: "Sara Iqbal", type: "Audio", status: "Completed" },
-  { time: "4:30 PM", patient: "Grace Lin", type: "Video", status: "Upcoming" },
-  { time: "5:15 PM", patient: "Ahmed Farah", type: "Video", status: "Upcoming" },
-];
+/** "3:15 PM" / "9:00 AM" → minutes past midnight, so the day's consultations
+ *  sort in chronological order. Unparseable labels sort last. */
+function minutesOfLabel(t: string): number {
+  const m = t.match(/(\d{1,2}):(\d{2})\s*(AM|PM)?/i);
+  if (!m) return Number.MAX_SAFE_INTEGER;
+  let h = Number(m[1]);
+  const ap = m[3]?.toUpperCase();
+  if (ap === "PM" && h !== 12) h += 12;
+  if (ap === "AM" && h === 12) h = 0;
+  return h * 60 + Number(m[2]);
+}
 
 export default async function DoctorDashboard() {
   const user = await getSessionUser();
@@ -33,6 +38,11 @@ export default async function DoctorDashboard() {
   // Was passing the doctor's *name* where a doctor_id is required → never matched
   // and silently fell back to mock data. Resolve the real catalog id instead.
   const appointmentRequests = doctor ? await getDoctorAppointments(doctor.id) : [];
+  // Today's schedule = the doctor's real accepted/finished consultations, in
+  // time order. Pending ones are still requests → they live in "New requests".
+  const schedule = appointmentRequests
+    .filter((a) => a.status === "Upcoming" || a.status === "Completed")
+    .sort((a, b) => minutesOfLabel(a.time) - minutesOfLabel(b.time));
   return (
     <DoctorShell>
       <RealtimeRefresh tables={["appointments"]} />
@@ -63,24 +73,30 @@ export default async function DoctorDashboard() {
               <h2 className="font-display text-xl font-normal tracking-tight">Today’s schedule</h2>
               <Link href="/doctor/appointments" className="text-sm text-ps hover:underline">View all</Link>
             </div>
-            <div className="divide-y divide-[#f0f0f0]">
-              {schedule.map((s) => (
-                <div key={s.time} className="flex items-center justify-between gap-4 py-3">
-                  <div className="flex items-center gap-4">
-                    <span className="w-20 text-sm font-medium text-mute">{s.time}</span>
-                    <div>
-                      <p className="font-medium">{s.patient}</p>
-                      <p className="text-xs text-mute">{s.type} consultation</p>
+            {schedule.length === 0 ? (
+              <p className="py-8 text-center text-sm text-mute">
+                No consultations scheduled yet. Requests you accept will appear here.
+              </p>
+            ) : (
+              <div className="divide-y divide-[#f0f0f0]">
+                {schedule.map((s) => (
+                  <div key={s.id} className="flex items-center justify-between gap-4 py-3">
+                    <div className="flex items-center gap-4">
+                      <span className="w-24 shrink-0 text-sm font-medium text-mute">{s.time || "—"}</span>
+                      <div className="min-w-0">
+                        <p className="truncate font-medium">{s.patientName}</p>
+                        <p className="text-xs text-mute">{s.mode} consultation</p>
+                      </div>
                     </div>
+                    {s.status === "Upcoming" ? (
+                      <Button href={`/consultation/${s.id}`} size="sm">Start</Button>
+                    ) : (
+                      <Badge tone="green">Done</Badge>
+                    )}
                   </div>
-                  {s.status === "Upcoming" ? (
-                    <Button href="/doctor/appointments" size="sm">Start</Button>
-                  ) : (
-                    <Badge tone="green">Done</Badge>
-                  )}
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 

@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useMemo, useState } from "react";
 import { PageHeader } from "@/components/DashboardShell";
 import { Avatar, Badge, Button, EmptyState } from "@/components/ui";
@@ -112,8 +111,8 @@ export function DoctorRequestsClient({ requests }: { requests: Appointment[] }) 
                       </>
                     ) : s === "Accepted" ? (
                       <>
-                        <Link href={`/consultation/${r.id}`} className="btn btn-primary btn-sm">Start</Link>
-                        <Link href="/doctor/patients" className="btn btn-light btn-sm">History</Link>
+                        <Button href={`/consultation/${r.id}`} size="sm">Start</Button>
+                        <Button href="/doctor/patients" variant="light" size="sm">History</Button>
                       </>
                     ) : (
                       <button className="btn btn-ghost btn-sm" onClick={() => set(r.id, "Pending")}>Undo</button>
@@ -149,8 +148,8 @@ export function DoctorRequestsClient({ requests }: { requests: Appointment[] }) 
                     </div>
                   </div>
                   <div className="flex shrink-0 gap-2">
-                    <Link href="/doctor/prescriptions" className="btn btn-light btn-sm">Prescription</Link>
-                    <Link href="/doctor/patients" className="btn btn-ghost btn-sm">History</Link>
+                    <Button href="/doctor/prescriptions" variant="light" size="sm">Prescription</Button>
+                    <Button href="/doctor/patients" variant="ghost" size="sm">History</Button>
                   </div>
                 </div>
               </div>

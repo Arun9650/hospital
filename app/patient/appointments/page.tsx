@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { PatientShell } from "@/components/roleShells";
 import { PageHeader } from "@/components/DashboardShell";
 import { Tabs } from "@/components/Tabs";
@@ -77,9 +76,9 @@ export default async function AppointmentsPage() {
                         appt={a}
                         actions={
                           <>
-                            <Link href="/patient/prescriptions" className="btn btn-light btn-sm">
+                            <Button href="/patient/prescriptions" variant="light" size="sm">
                               Prescription
-                            </Link>
+                            </Button>
                             <RateButton doctorName={a.doctorName} />
                           </>
                         }

@@ -17,7 +17,6 @@ const modeInfo: Record<string, { icon: string; desc: string }> = {
 };
 
 export function BookingWizardClient({ doctor }: { doctor: Doctor }) {
-  console.log("🚀 ~ BookingWizardClient ~ doctor:", doctor)
   // Chat first: surface the chat option ahead of other modes, and preselect it.
   const orderedModes = [...doctor.modes].sort(
     (a, b) => (a === "Chat" ? -1 : 0) - (b === "Chat" ? -1 : 0)
