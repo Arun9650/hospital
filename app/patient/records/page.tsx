@@ -5,6 +5,7 @@ import { Button } from "@/components/ui";
 import { getMedicalRecords } from "@/lib/db";
 import { getUserId } from "@/lib/auth";
 import type { MedicalRecord } from "@/lib/data";
+import { UploadRecordButton } from "@/components/UploadRecordButton";
 
 const typeIcon: Record<string, string> = {
   "Lab Report": "🧪",
@@ -33,8 +34,23 @@ function RecordList({ items }: { items: MedicalRecord[] }) {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <button className="btn btn-light btn-sm hidden sm:inline-flex">View</button>
-            <button className="btn btn-ghost btn-sm">Download</button>
+            {r.url ? (
+              <>
+                <a
+                  href={r.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="btn btn-light btn-sm hidden sm:inline-flex"
+                >
+                  View
+                </a>
+                <a href={r.url} download className="btn btn-ghost btn-sm">
+                  Download
+                </a>
+              </>
+            ) : (
+              <span className="text-xs text-mute">Demo file</span>
+            )}
           </div>
         </div>
       ))}
@@ -51,7 +67,7 @@ export default async function RecordsPage() {
       <PageHeader
         title="Medical records"
         subtitle="Every report, scan and note in one encrypted timeline."
-        action={<Button>Upload record</Button>}
+        action={<UploadRecordButton />}
       />
 
       <div className="mb-6 grid gap-4 sm:grid-cols-3">

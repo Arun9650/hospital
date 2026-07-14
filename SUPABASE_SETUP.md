@@ -59,13 +59,16 @@ Open the **SQL Editor** in Supabase and run, in order:
 7. `supabase/migrations/0007_appointment_booking.sql` — atomic booking function + notification timestamps/relations.
 8. `supabase/migrations/0008_storage.sql` — `consultation-files` Storage bucket + policies for in-call file sharing.
 9. `supabase/migrations/0009_realtime_tables.sql` — stream `appointments` & `prescriptions` live so lists refresh without a manual reload.
-10. `supabase/seed.sql` — demo specialties, doctors, reviews, appointments, etc.
-11. `supabase/seed_chat.sql` — demo chat threads & messages.
-12. `supabase/seed_patients.sql` — demo patient records for Dr. Anaya Rao's panel.
+10. `supabase/migrations/0010_medical_records_files.sql` — `file_url`/`file_path` columns + a `medical-records` Storage bucket (uploads namespaced by user id) for patient-uploaded reports.
+11. `supabase/seed.sql` — demo specialties, doctors, reviews, appointments, etc.
+12. `supabase/seed_chat.sql` — demo chat threads & messages.
+13. `supabase/seed_patients.sql` — demo patient records for Dr. Anaya Rao's panel.
 
-> **In-call file sharing:** `0008_storage.sql` creates a **public** `consultation-files`
-> bucket so a shared link works for both parties. For real medical files, make the
-> bucket private and switch the upload code to `createSignedUrl()` before production.
+> **File storage:** `0008_storage.sql` (`consultation-files`) and `0010_medical_records_files.sql`
+> (`medical-records`) both create **public** buckets so a shared link works without minting
+> signed URLs. For real PHI, make these buckets private and switch the upload code to
+> `createSignedUrl()` before production. `medical-records` uploads are namespaced by user id
+> and the insert policy enforces that a user can only write into their own folder.
 
 (Or, with the Supabase CLI: `supabase db push` then run the seed files.)
 

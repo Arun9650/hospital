@@ -75,6 +75,8 @@ export type MedicalRecord = {
   date: string;
   by: string;
   size: string;
+  /** Download/view URL for uploaded files; absent for seeded demo rows. */
+  url?: string;
 };
 
 export type ServiceItem = {

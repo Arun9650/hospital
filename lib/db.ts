@@ -104,6 +104,7 @@ function mapRecord(r: Row): MedicalRecord {
     date: String(r.date_label ?? ""),
     by: String(r.issued_by ?? ""),
     size: String(r.size ?? ""),
+    url: r.file_url ? String(r.file_url) : undefined,
   };
 }
 

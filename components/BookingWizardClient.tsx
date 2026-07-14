@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useState } from "react";
 import { Avatar, Button, Field, Stars } from "@/components/ui";
+import { useToast } from "@/components/Toast";
+import { uploadMedicalRecord } from "@/lib/actions/records";
 import type { Doctor } from "@/lib/data";
 import { buildBookingDays, type BookingDay } from "@/lib/booking";
 import { createAppointment } from "@/lib/actions/data";
@@ -37,6 +39,27 @@ export function BookingWizardClient({ doctor, days }: { doctor: Doctor; days?: B
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [apptId, setApptId] = useState<string | undefined>();
+  // Pre-consultation document uploads → land in the patient's medical records.
+  const [attachments, setAttachments] = useState<string[]>([]);
+  const [uploadingDoc, setUploadingDoc] = useState(false);
+  const { show: showToast } = useToast();
+
+  async function handleAttach(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files ?? []);
+    e.target.value = "";
+    if (!files.length) return;
+    setUploadingDoc(true);
+    for (const file of files) {
+      const fd = new FormData();
+      fd.set("file", file);
+      fd.set("title", file.name);
+      fd.set("type", "Lab Report");
+      const res = await uploadMedicalRecord(fd);
+      if (res.ok) setAttachments((a) => [...a, file.name]);
+      else showToast(res.error || `Couldn't upload ${file.name}`, "error");
+    }
+    setUploadingDoc(false);
+  }
 
   const canNext =
     (step === 0 && mode) ||
@@ -199,10 +222,28 @@ export function BookingWizardClient({ doctor, days }: { doctor: Doctor; days?: B
                   className="field"
                 />
               </Field>
-              <Field label="Upload reports (optional)">
-                <div className="flex items-center gap-3 rounded-lg border border-dashed border-[#cdd5dd] bg-surface-card p-5 text-sm text-mute">
-                  <span className="text-xl">📎</span> Drag & drop lab reports or photos, or click to browse
-                </div>
+              <Field label="Upload reports (optional)" hint="Shared with your medical records before the visit.">
+                <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-dashed border-[#cdd5dd] bg-surface-card p-5 text-sm text-mute transition-colors hover:border-ash">
+                  <span className="text-xl">{uploadingDoc ? "⏳" : "📎"}</span>
+                  {uploadingDoc ? "Uploading…" : "Click to upload lab reports or photos (PDF or image)"}
+                  <input
+                    type="file"
+                    multiple
+                    accept=".pdf,image/*"
+                    className="hidden"
+                    onChange={handleAttach}
+                    disabled={uploadingDoc}
+                  />
+                </label>
+                {attachments.length > 0 && (
+                  <ul className="mt-2 space-y-1">
+                    {attachments.map((name, i) => (
+                      <li key={`${name}-${i}`} className="flex items-center gap-2 text-xs text-success">
+                        <span>✓</span> {name}
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </Field>
             </div>
           )}

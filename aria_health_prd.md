@@ -48,6 +48,8 @@ Since the original audit, several Phase 1 ("harden the demo") items have shipped
 
 *   **Chat — realtime UX (Phase 2)** — the doctor↔patient chat gained **auto-scroll** to the newest message, **typing indicators** (Realtime broadcast in live mode, simulated in mock), **doctor quick-reply templates**, and **conversation search** (`components/ChatClient.tsx`). See §4.1.3 for the full chat spec and remaining gaps (attachments, read receipts, pagination, retention, encryption).
 
+*   **Medical records — file storage (Phase 2)** — patients can upload lab reports/scans/etc. (Supabase Storage `medical-records` bucket, user-id-scoped upload paths) from the records page and attach documents during booking; records list gained real view/download links (`0010_medical_records_files.sql`, `lib/actions/records.ts`, `components/UploadRecordButton.tsx`). See §4.1.5 for remaining gaps (private bucket + signed URLs for PHI, license uploads, doctor-side access).
+
 **🟡 Partially done**
 *   The standalone (no-`appointmentId`) `/doctor/prescriptions` builder is still a demo preview hardcoded to "Dr. Anaya Rao"; the client-side PDF download preview likewise uses the demo name.
 
@@ -262,6 +264,7 @@ The realtime chat system is a core communication channel between patients and do
     *   The system shall provide secure file storage (e.g., Supabase Storage) for patient medical records, license documents, and report uploads.
     *   The system shall allow patients to view, download, and upload their medical records and reports.
     *   The system shall allow doctors to view patient medical history and records during consultations.
+    *   **Implementation status (updated 2026-07-14):** Patients can **upload** records (title + type + file) from the records page and **attach documents during booking**, stored in a `medical-records` Supabase Storage bucket (uploads namespaced by user id; insert policy scopes each user to their own folder) with a `medical_records` row; the records list now offers real **view/download** links (`0010_medical_records_files.sql`, `lib/actions/records.ts`, `components/UploadRecordButton.tsx`). Still open: the bucket is **public** (PHI needs a private bucket + signed URLs — pairs with role-aware RLS), doctor license-document uploads, and doctor-side access to a patient's records during a consultation.
 *   **Doctor Search & Filter:**
     *   The system shall implement server-side, paginated search for doctors by name, specialty, and tags.
     *   The system shall allow filtering doctors by specialty, mode, fee, rating, geographical location, and insurance providers.
