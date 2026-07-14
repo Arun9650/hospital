@@ -24,6 +24,45 @@ export async function getUserId(): Promise<string | undefined> {
   }
 }
 
+export type Profile = {
+  full_name: string;
+  email: string;
+  phone: string;
+  dob: string; // yyyy-mm-dd for <input type="date">
+  gender: string;
+  role: string;
+};
+
+/** The signed-in user's editable profile, or null in mock/demo mode (the caller
+ *  supplies role-appropriate demo defaults). Falls back to auth metadata if the
+ *  profiles row is missing. */
+export async function getMyProfile(): Promise<Profile | null> {
+  if (!isSupabaseConfigured) return null;
+  try {
+    const sb = await createServerSupabase();
+    const {
+      data: { user },
+    } = await sb.auth.getUser();
+    if (!user) return null;
+    const { data } = await sb
+      .from("profiles")
+      .select("full_name, email, phone, dob, gender, role")
+      .eq("id", user.id)
+      .maybeSingle();
+    const meta = user.user_metadata ?? {};
+    return {
+      full_name: data?.full_name ?? (meta.full_name as string) ?? "",
+      email: data?.email ?? user.email ?? "",
+      phone: data?.phone ?? "",
+      dob: data?.dob ?? "",
+      gender: data?.gender ?? "",
+      role: data?.role ?? (meta.role as string) ?? "patient",
+    };
+  } catch {
+    return null;
+  }
+}
+
 /** Full session user for headers/shells, or null. */
 export async function getSessionUser(): Promise<SessionUser | null> {
   if (!isSupabaseConfigured) return null;

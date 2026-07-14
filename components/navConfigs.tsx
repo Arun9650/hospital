@@ -25,6 +25,7 @@ const icons = {
   stethoscope: "M6 3v6a5 5 0 0010 0V3M4 3h4M16 3h4M19 14a3 3 0 100 6 3 3 0 000-6zM11 14v3a5 5 0 005 5",
   content: "M4 5h16M4 12h16M4 19h10",
   chat: "M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z",
+  user: "M12 12a4 4 0 100-8 4 4 0 000 8zM6 21v-1a4 4 0 014-4h4a4 4 0 014 4v1",
 };
 
 export const patientNav: NavItem[] = [
@@ -36,6 +37,7 @@ export const patientNav: NavItem[] = [
   { href: "/patient/prescriptions", label: "Prescriptions", icon: <I d={icons.rx} /> },
   { href: "/patient/assistant", label: "AI Assistant", icon: <I d={icons.spark} /> },
   { href: "/patient/notifications", label: "Notifications", icon: <I d={icons.bell} /> },
+  { href: "/patient/profile", label: "Profile", icon: <I d={icons.user} /> },
 ];
 
 export const doctorNav: NavItem[] = [
@@ -48,6 +50,7 @@ export const doctorNav: NavItem[] = [
   { href: "/doctor/earnings", label: "Earnings", icon: <I d={icons.wallet} /> },
   { href: "/doctor/availability", label: "Availability", icon: <I d={icons.clock} /> },
   { href: "/doctor/notifications", label: "Notifications", icon: <I d={icons.bell} /> },
+  { href: "/doctor/profile", label: "Profile", icon: <I d={icons.user} /> },
 ];
 
 export const adminNav: NavItem[] = [
@@ -60,4 +63,5 @@ export const adminNav: NavItem[] = [
   { href: "/admin/reports", label: "Reports", icon: <I d={icons.file} /> },
   { href: "/admin/content", label: "Content", icon: <I d={icons.content} /> },
   { href: "/admin/notifications", label: "Notifications", icon: <I d={icons.bell} /> },
+  { href: "/admin/profile", label: "Profile", icon: <I d={icons.user} /> },
 ];

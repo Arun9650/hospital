@@ -38,13 +38,14 @@ Since the original audit, several Phase 1 ("harden the demo") items have shipped
 *   **Mobile performance** — the ~246 KB Supabase realtime client is lazy-`import()`ed inside effects (Chat, Notifications, RealtimeRefresh) so it stays off the initial hydration path and taps stay responsive.
 *   **Admin verification persistence** — `decideVerification` is now wired in `app/admin/verification/page.tsx` with optimistic state, a busy/disabled spinner, and success/error toasts.
 *   **Prescription builder patient tie** — launched from a completed consultation (`/doctor/prescriptions?appointmentId=…`) it now issues via `issuePrescriptionForAppointment`, which resolves the real patient and doctor server-side; the header drops the hardcoded demo name in that mode. The no-arg builder remains a demo preview.
-*   **Route-level loading & error** — root `app/loading.tsx` (Suspense spinner) and `app/error.tsx` (recoverable error boundary with retry) now cover every route.
+*   **Route-level loading & error** — root `app/loading.tsx` (Suspense spinner) and `app/error.tsx` (recoverable error boundary with retry), plus per-section `app/{patient,doctor,admin}/loading.tsx` that render the dashboard shell around a `PageSkeleton`, so navigating between portal pages shows an in-place skeleton (sidebar stays put) instead of a frozen screen.
+*   **Profile management (Phase 2)** — patient/doctor/admin `/…/profile` pages let a signed-in user view and edit name, phone, DOB, and gender, persisted to the `profiles` table via `updateProfile`; auth metadata (name/initials) is kept in sync so the dashboard shell updates immediately. Reader `getMyProfile`, shared `ProfileForm`, and "Profile" nav links added. (`profiles` RLS already allows self-update.)
 
 **🟡 Partially done**
 *   The standalone (no-`appointmentId`) `/doctor/prescriptions` builder is still a demo preview hardcoded to "Dr. Anaya Rao"; the client-side PDF download preview likewise uses the demo name.
 
 **🔴 Not started (unchanged from the audit)**
-*   Payments, role-aware RLS, file storage, profile & settings pages (none exist), forgot/reset password, social login, server-side (Zod) validation, pagination / server-side search, real LLM assistant, admin content management, real analytics, paid TURN.
+*   Payments, role-aware RLS, file storage, **Settings** (notification prefs / privacy / language / delete account — deferred: needs a preferences table before building real toggles), forgot/reset password, social login, server-side (Zod) validation, pagination / server-side search, real LLM assistant, admin content management, real analytics, paid TURN.
 
 
 ## 2. Goals and Objectives
