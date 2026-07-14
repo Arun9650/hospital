@@ -88,13 +88,66 @@ export function ChatClient({
   const [activeId, setActiveId] = useState(firstId);
   const [mobileThreadOpen, setMobileThreadOpen] = useState(false);
   const [draft, setDraft] = useState("");
+  const [query, setQuery] = useState("");
+  // Which threads currently show a "typing…" indicator for the OTHER party.
+  const [typing, setTyping] = useState<Record<string, boolean>>({});
+  const channelRef = useRef<RealtimeChannel | null>(null);
+  const typingTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  const lastTypingSent = useRef(0);
+  const bottomRef = useRef<HTMLDivElement>(null);
 
   const ownSide: "patient" | "doctor" = perspective;
+
+  // Doctor canned instructions — one tap fills the composer, ready to edit/send.
+  const quickReplies = [
+    "Thanks for the update — I've noted this in your record.",
+    "Please continue the current medication and keep monitoring.",
+    "Let's book a follow-up so we can review this properly.",
+    "If symptoms worsen suddenly, please seek urgent care.",
+  ];
+
+  // Mark the other party as typing in a thread, auto-clearing after a beat.
+  function showTyping(threadId: string, ms = 2200) {
+    setTyping((t) => (t[threadId] ? t : { ...t, [threadId]: true }));
+    clearTimeout(typingTimers.current[threadId]);
+    typingTimers.current[threadId] = setTimeout(
+      () => setTyping((t) => ({ ...t, [threadId]: false })),
+      ms
+    );
+  }
+
+  // Throttled broadcast that we're typing, so the other client can show it.
+  function notifyTyping(threadId: string) {
+    if (!configured) return;
+    const now = Date.now();
+    if (now - lastTypingSent.current < 1200) return;
+    lastTypingSent.current = now;
+    channelRef.current?.send({
+      type: "broadcast",
+      event: "typing",
+      payload: { threadId, sender: ownSide },
+    });
+  }
+
+  useEffect(() => () => {
+    Object.values(typingTimers.current).forEach(clearTimeout);
+  }, []);
 
   const active = useMemo(
     () => threads.find((t) => t.id === activeId),
     [threads, activeId]
   );
+
+  // Client-side conversation search over the loaded threads.
+  const visibleThreads = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return threads;
+    return threads.filter((t) => {
+      const name = perspective === "patient" ? t.doctorName : t.patientName;
+      const last = t.messages[t.messages.length - 1]?.text ?? "";
+      return name.toLowerCase().includes(q) || last.toLowerCase().includes(q);
+    });
+  }, [threads, query, perspective]);
 
   // Keep the latest activeId reachable inside the realtime callback without
   // re-subscribing every time it changes.
@@ -118,6 +171,11 @@ export function ChatClient({
       sb = createClient();
       channel = sb
         .channel("chat_messages")
+        .on("broadcast", { event: "typing" }, ({ payload }) => {
+          const p = payload as { threadId: string; sender: Perspective };
+          if (p.sender === ownSide) return; // ignore our own echo
+          showTyping(p.threadId);
+        })
         .on(
           "postgres_changes",
           { event: "INSERT", schema: "public", table: "chat_messages" },
@@ -147,16 +205,27 @@ export function ChatClient({
                 };
               });
             });
+            if (row.sender !== ownSide) {
+              setTyping((t) => ({ ...t, [row.thread_id]: false }));
+            }
           }
         )
         .subscribe();
+      channelRef.current = channel;
     });
 
     return () => {
       cancelled = true;
+      channelRef.current = null;
       if (sb && channel) sb.removeChannel(channel);
     };
   }, [configured, ownSide]);
+
+  // Auto-scroll the conversation to the newest message on send/receive and when
+  // switching threads — the composer should always show the latest bubble.
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  }, [activeId, active?.messages.length]);
 
   function other(t: ChatThread) {
     return perspective === "patient"
@@ -206,9 +275,11 @@ export function ChatClient({
       return;
     }
 
-    // Mock mode: optimistic append + a canned doctor auto-reply.
+    // Mock mode: optimistic append + a canned doctor auto-reply, with a brief
+    // "typing…" indicator in between so the demo feels live.
     appendMessage(threadId, { id: `s-${Date.now()}`, from: ownSide, text, time: clockLabel() });
     if (perspective === "patient") {
+      showTyping(threadId, 1200);
       setTimeout(() => {
         appendMessage(threadId, {
           id: `r-${Date.now()}`,
@@ -216,6 +287,7 @@ export function ChatClient({
           text: doctorReply(text),
           time: clockLabel(),
         });
+        setTyping((t) => ({ ...t, [threadId]: false }));
       }, 900);
     }
   }
@@ -231,9 +303,19 @@ export function ChatClient({
           <p className="text-xs text-mute">
             {perspective === "patient" ? "Chat with your doctors" : "Chat with your patients"}
           </p>
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search conversations"
+            className="mt-3 w-full rounded-full bg-surface-card px-3.5 py-2 text-xs outline-none placeholder:text-mute"
+            aria-label="Search conversations"
+          />
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto">
-          {threads.map((t) => {
+          {visibleThreads.length === 0 && (
+            <p className="px-4 py-6 text-center text-xs text-mute">No conversations match “{query}”.</p>
+          )}
+          {visibleThreads.map((t) => {
             const o = other(t);
             const last = t.messages[t.messages.length - 1];
             const isActive = t.id === activeId;
@@ -289,7 +371,9 @@ export function ChatClient({
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-medium">{other(active).name}</p>
               <p className="text-xs text-mute">
-                {active.online ? (
+                {typing[active.id] ? (
+                  <span className="text-ps">typing…</span>
+                ) : active.online ? (
                   <span className="text-success">● Online</span>
                 ) : (
                   `Active ${active.lastActive}`
@@ -322,13 +406,33 @@ export function ChatClient({
                 </div>
               );
             })}
+            <div ref={bottomRef} />
           </div>
+
+          {/* Doctor quick-reply templates — one tap fills the composer. */}
+          {perspective === "doctor" && (
+            <div className="flex gap-2 overflow-x-auto border-t border-[#f0f0f0] px-3 pt-2 no-scrollbar">
+              {quickReplies.map((q) => (
+                <button
+                  key={q}
+                  type="button"
+                  onClick={() => setDraft(q)}
+                  className="chip shrink-0 whitespace-nowrap"
+                >
+                  {q.length > 30 ? q.slice(0, 30) + "…" : q}
+                </button>
+              ))}
+            </div>
+          )}
 
           {/* Composer */}
           <form onSubmit={send} className="flex items-center gap-2 border-t border-[#f0f0f0] p-3">
             <input
               value={draft}
-              onChange={(e) => setDraft(e.target.value)}
+              onChange={(e) => {
+                setDraft(e.target.value);
+                notifyTyping(active.id);
+              }}
               placeholder={`Message ${other(active).name.split(" ").slice(0, 2).join(" ")}…`}
               className="min-w-0 flex-1 rounded-full bg-surface-card px-4 py-3 text-sm outline-none placeholder:text-mute"
             />

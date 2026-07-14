@@ -46,6 +46,8 @@ Since the original audit, several Phase 1 ("harden the demo") items have shipped
 
 *   **Booking — post-booking & policies (Phase 2)** — patients can now **cancel** and **reschedule** their own appointments from the appointments dashboard (`PatientAppointmentActions` → `cancelMyAppointment` / `rescheduleAppointment`), each notifying the doctor; booking confirmation now offers a **calendar invite (.ics)** download and a **booking reference number** (`lib/ics.ts`); the payment step requires an explicit **fee-acknowledgement** before confirming. See §4.1.1 for the full booking spec and remaining gaps (real payments, waiting list, reminders, timezones, rate limiting).
 
+*   **Chat — realtime UX (Phase 2)** — the doctor↔patient chat gained **auto-scroll** to the newest message, **typing indicators** (Realtime broadcast in live mode, simulated in mock), **doctor quick-reply templates**, and **conversation search** (`components/ChatClient.tsx`). See §4.1.3 for the full chat spec and remaining gaps (attachments, read receipts, pagination, retention, encryption).
+
 **🟡 Partially done**
 *   The standalone (no-`appointmentId`) `/doctor/prescriptions` builder is still a demo preview hardcoded to "Dr. Anaya Rao"; the client-side PDF download preview likewise uses the demo name.
 
@@ -180,22 +182,86 @@ The appointment booking system is a core user journey and must provide a smooth,
 *   The system shall support screen sharing during consultations.
 *   The system shall provide a waiting room feature for patients before consultations.
 
-#### 4.1.3 Prescription Management
+#### 4.1.3 Realtime Chat Implementation (Detailed)
+
+The realtime chat system is a core communication channel between patients and doctors, available both **during consultations** and **asynchronously** (Chat-only appointments or follow-ups).
+
+**Key Features:**
+
+**1. Core Chat Functionality**
+- Real-time bidirectional messaging using Supabase Realtime.
+- Support for text messages, emojis, and rich text formatting.
+- File and image attachments (via Supabase Storage).
+- Message read receipts (single & double ticks).
+- Typing indicators (e.g., "Dr. Anaya is typing...").
+- Message threading / replies (optional but recommended).
+
+**2. Chat Contexts**
+- **Pre-consultation chat**: For appointment-related questions before the call.
+- **In-consultation chat**: Sidebar chat available during Video/Audio calls.
+- **Post-consultation chat**: Continued conversation for follow-ups.
+- **Chat-only appointments**: Full consultation happens entirely via chat.
+
+**3. UI/UX Requirements**
+- Clean, modern chat interface (similar to WhatsApp/Telegram but medical-grade).
+- Message bubbles aligned left (doctor) / right (patient).
+- Timestamps and date separators.
+- Scroll to bottom on new messages.
+- Message status indicators (sending, sent, delivered, read).
+- Ability to view attached images/documents in full screen.
+- Search within chat history.
+
+**4. Doctor Features**
+- Access to all patient chats from dashboard.
+- Ability to send prescriptions directly from chat.
+- Mark chat as "Resolved" or escalate to video/audio.
+- Quick reply templates (e.g., common instructions, follow-up requests).
+
+**5. Patient Features**
+- View chat history with all their doctors.
+- Easy access to chat from appointment card.
+- Notification when doctor replies.
+
+**6. Technical Implementation Details**
+
+- **Backend**: Supabase Realtime (PostgreSQL + Broadcast + Presence).
+- **Database Schema**:
+  - `chat_threads` table (one thread per patient-doctor pair or per appointment).
+  - `chat_messages` table with columns: `id`, `thread_id`, `sender_id`, `receiver_id`, `message`, `type` (text/file), `file_url`, `read_at`, `created_at`.
+- **Row Level Security (RLS)**: Strict policies so users can only access threads they are part of.
+- **Real-time Subscriptions**:
+  - Subscribe to new messages in active thread.
+  - Subscribe to thread list updates (unread counts).
+- **Pagination**: Load messages in chunks (e.g., 50 at a time) with infinite scroll.
+- **Optimistic Updates**: Messages appear instantly on send, with rollback on failure.
+- **File Handling**: Upload to Supabase Storage → store secure URL in message.
+- **Typing Indicators**: Use Supabase Presence or a dedicated `typing_status` table.
+- **Offline Support**: Queue messages locally and sync when back online (optional for Phase 2).
+
+**7. Security & Compliance**
+- All messages containing PHI must be encrypted at rest.
+- Audit logging for sensitive messages.
+- Ability for users to delete messages (soft delete).
+- Message retention policy (e.g., auto-delete after X months).
+
+**8. Notifications**
+- In-app + push + email notifications for new messages.
+- Mute chat option.
+
+**Implementation status (updated 2026-07-14):** Realtime bidirectional messaging (Supabase Realtime postgres_changes), left/right message bubbles, per-message timestamps, unread counts/badges, optimistic send with echo dedupe, and the mock-mode canned-reply demo already shipped. Newly shipped: **auto-scroll to newest message** on send/receive/thread-switch; **typing indicators** (Realtime broadcast on the shared channel in live mode, simulated during the mock reply); **doctor quick-reply templates** (one tap fills the composer); and **conversation search** over loaded threads (`components/ChatClient.tsx`). Still open: file/image attachments (needs Supabase Storage), read receipts / delivered ticks (needs a `read_at` column + read-status realtime path), message pagination/infinite scroll, threading/replies, soft delete + retention, mute, offline queue, at-rest PHI encryption + audit logging, and email notifications. Note the current demo-permissive RLS (`0002_chat.sql`) must be replaced with participant-scoped policies before production.
+
+#### 4.1.4 Prescription Management
 *   The system shall enable doctors to issue prescriptions that are accurately tied to specific patient IDs.
 *   The system shall generate prescriptions in PDF format.
 *   The system shall integrate with pharmacy or e-prescription services for direct prescription delivery.
 *   The system shall ensure that the `issuePrescription` action persists and is not tied to hardcoded doctor/patient names.
 
-#### 4.1.4 Medical Records, Chat, Doctor Search & AI Assistant
+#### 4.1.5 Medical Records, Doctor Search & AI Assistant
+*(Chat is now specified in detail in §4.1.3.)*
 *   **Medical Records Management:**
     *   The system shall provide secure file storage (e.g., Supabase Storage) for patient medical records, license documents, and report uploads.
     *   The system shall allow patients to view, download, and upload their medical records and reports.
     *   The system shall allow doctors to view patient medical history and records during consultations.
-*   **Chat Functionality:**
-    *   The system shall support real-time chat between patients and doctors.
-    *   The system shall implement read receipts, typing indicators, and attachment capabilities within the chat.
-    *   The system shall implement pagination for chat messages to improve scalability.
-    *   The system shall replace canned keyword responses in mock mode with real-person interactions or an LLM-backed AI assistant.
 *   **Doctor Search & Filter:**
     *   The system shall implement server-side, paginated search for doctors by name, specialty, and tags.
     *   The system shall allow filtering doctors by specialty, mode, fee, rating, geographical location, and insurance providers.
