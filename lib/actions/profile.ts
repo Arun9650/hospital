@@ -52,3 +52,21 @@ export async function updateProfile(input: {
     return { ok: false, error: "Couldn't save your profile. Please try again." };
   }
 }
+
+/** Change the signed-in user's password. No-ops in mock mode. */
+export async function changePassword(newPassword: string): Promise<Result> {
+  if (newPassword.length < 8) return { ok: false, error: "Password must be at least 8 characters." };
+  if (!isSupabaseConfigured) return { ok: true };
+  try {
+    const sb = await createServerSupabase();
+    const {
+      data: { user },
+    } = await sb.auth.getUser();
+    if (!user) return { ok: false, error: "You're not signed in." };
+    const { error } = await sb.auth.updateUser({ password: newPassword });
+    if (error) return { ok: false, error: error.message };
+    return { ok: true };
+  } catch {
+    return { ok: false, error: "Couldn't update your password. Please try again." };
+  }
+}

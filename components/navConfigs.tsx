@@ -26,6 +26,7 @@ const icons = {
   content: "M4 5h16M4 12h16M4 19h10",
   chat: "M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z",
   user: "M12 12a4 4 0 100-8 4 4 0 000 8zM6 21v-1a4 4 0 014-4h4a4 4 0 014 4v1",
+  cog: "M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6",
 };
 
 export const patientNav: NavItem[] = [
@@ -38,6 +39,7 @@ export const patientNav: NavItem[] = [
   { href: "/patient/assistant", label: "AI Assistant", icon: <I d={icons.spark} /> },
   { href: "/patient/notifications", label: "Notifications", icon: <I d={icons.bell} /> },
   { href: "/patient/profile", label: "Profile", icon: <I d={icons.user} /> },
+  { href: "/patient/settings", label: "Settings", icon: <I d={icons.cog} /> },
 ];
 
 export const doctorNav: NavItem[] = [
@@ -51,6 +53,7 @@ export const doctorNav: NavItem[] = [
   { href: "/doctor/availability", label: "Availability", icon: <I d={icons.clock} /> },
   { href: "/doctor/notifications", label: "Notifications", icon: <I d={icons.bell} /> },
   { href: "/doctor/profile", label: "Profile", icon: <I d={icons.user} /> },
+  { href: "/doctor/settings", label: "Settings", icon: <I d={icons.cog} /> },
 ];
 
 export const adminNav: NavItem[] = [
@@ -64,4 +67,5 @@ export const adminNav: NavItem[] = [
   { href: "/admin/content", label: "Content", icon: <I d={icons.content} /> },
   { href: "/admin/notifications", label: "Notifications", icon: <I d={icons.bell} /> },
   { href: "/admin/profile", label: "Profile", icon: <I d={icons.user} /> },
+  { href: "/admin/settings", label: "Settings", icon: <I d={icons.cog} /> },
 ];
