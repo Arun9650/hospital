@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createServerSupabase } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
+import { firstError, maxLen, required } from "@/lib/validate";
 
 type Result = { ok: boolean; error?: string };
 
@@ -22,7 +23,13 @@ export async function updateProfile(input: {
   gender: string;
 }): Promise<Result> {
   const full_name = input.full_name.trim();
-  if (!full_name) return { ok: false, error: "Name is required." };
+  const err = firstError(
+    required(full_name, "Name"),
+    maxLen(full_name, 100, "Name"),
+    maxLen(input.phone, 30, "Phone"),
+    maxLen(input.gender, 20, "Gender"),
+  );
+  if (err) return { ok: false, error: err };
   if (!isSupabaseConfigured) return { ok: true }; // demo mode — nothing to persist
 
   try {

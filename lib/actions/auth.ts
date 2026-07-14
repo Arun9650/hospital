@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 import { createServerSupabase } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
+import { firstError, isEmail, maxLen, minPassword, required } from "@/lib/validate";
 import { specialties } from "@/lib/data";
 
 function initialsFrom(name: string, email: string) {
@@ -121,6 +122,9 @@ export async function signUpPatient(formData: FormData) {
   const password = String(formData.get("password") ?? "");
   const fullName = String(formData.get("full_name") ?? "").trim();
 
+  const invalid = firstError(isEmail(email), minPassword(password), required(fullName, "Full name"), maxLen(fullName, 100, "Full name"));
+  if (invalid) redirect(`/register?error=${encodeURIComponent(invalid)}`);
+
   if (isSupabaseConfigured) {
     const sb = await createServerSupabase();
     const { data, error } = await sb.auth.signUp({
@@ -150,6 +154,9 @@ export async function signUpDoctor(formData: FormData) {
   const experience = Number(formData.get("experience") ?? 0) || 0;
   const fee = Number(formData.get("fee") ?? 0) || 0;
   const qualifications = String(formData.get("qualifications") ?? "").trim();
+
+  const invalid = firstError(isEmail(email), minPassword(password), required(fullName, "Full name"), maxLen(fullName, 100, "Full name"));
+  if (invalid) redirect(`/doctor/register?error=${encodeURIComponent(invalid)}`);
 
   if (isSupabaseConfigured) {
     const sb = await createServerSupabase();

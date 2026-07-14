@@ -2,6 +2,7 @@
 
 import { createServerSupabase } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
+import { firstError, maxLen, oneOf, required } from "@/lib/validate";
 import { shortTime } from "@/lib/time";
 import { sendPushToUser } from "@/lib/push/send";
 import type { Prescription } from "@/lib/data";
@@ -125,6 +126,8 @@ export async function createAppointment(input: {
       });
       return { ok: false, error: "Missing appointment details. Pick a slot and try again." };
     }
+    const reasonErr = maxLen(input.reason, 1000, "Reason");
+    if (reasonErr) return { ok: false, error: reasonErr };
 
     // Idempotency / duplicate-click guard: reuse an existing pending or upcoming
     // booking for the same patient/doctor/slot rather than creating a second one
@@ -229,7 +232,10 @@ export async function sendChatMessage(input: {
   body: string;
 }): Promise<{ ok: boolean; id?: string; time?: string }> {
   const body = input.body.trim();
-  if (!body) return { ok: false };
+  // Trust boundary: non-empty, length-capped, known sender — before any DB write.
+  if (firstError(required(body, "Message"), maxLen(body, 4000, "Message"), oneOf(input.sender, ["patient", "doctor"] as const, "Sender"))) {
+    return { ok: false };
+  }
   if (!isSupabaseConfigured) return { ok: true };
   try {
     const sb = await createServerSupabase();
@@ -335,6 +341,9 @@ export async function issuePrescription(input: {
   tests: string[];
   notes: string;
 }): Promise<Result> {
+  if (firstError(maxLen(input.diagnosis, 500, "Diagnosis"), maxLen(input.notes, 2000, "Notes")) || input.medicines.length > 50) {
+    return { ok: false };
+  }
   if (!isSupabaseConfigured) return { ok: true };
   try {
     const sb = await createServerSupabase();
@@ -380,6 +389,9 @@ export async function issuePrescriptionForAppointment(
     notes: string;
   }
 ): Promise<Result & { prescription?: Prescription }> {
+  if (firstError(maxLen(input.diagnosis, 500, "Diagnosis"), maxLen(input.notes, 2000, "Notes")) || input.medicines.length > 50) {
+    return { ok: false };
+  }
   if (!isSupabaseConfigured) return { ok: true };
   try {
     const sb = await createServerSupabase();
