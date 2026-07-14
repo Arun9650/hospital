@@ -44,6 +44,8 @@ Since the original audit, several Phase 1 ("harden the demo") items have shipped
 *   **Forgot / reset password (Phase 2)** — `/forgot-password` (`requestPasswordReset` → `resetPasswordForEmail`) and `/reset-password` (`updatePassword` → `updateUser`, then sign out so the user logs in fresh). A new `/auth/callback` route handler exchanges the PKCE `code` for a session (also fixes email-confirmation links generally). The login page's dead "Forgot password? Contact support." is now a real link, with a post-reset success banner. Email enumeration avoided (always reports "sent").
 *   **Server-side input validation (Phase 2)** — a small shared `lib/validate.ts` (required / maxLen / oneOf / isEmail / minPassword / firstError, no schema dependency) now guards the user-input write actions at the trust boundary: chat messages (non-empty, ≤4000, known sender), appointment reason (≤1000), prescription diagnosis/notes/medicine-count caps, profile field caps, and server-side sign-up email/password/name checks (previously client-only). Prevents unbounded-text bloat/abuse and untrusted-client writes.
 
+*   **Booking — post-booking & policies (Phase 2)** — patients can now **cancel** and **reschedule** their own appointments from the appointments dashboard (`PatientAppointmentActions` → `cancelMyAppointment` / `rescheduleAppointment`), each notifying the doctor; booking confirmation now offers a **calendar invite (.ics)** download and a **booking reference number** (`lib/ics.ts`); the payment step requires an explicit **fee-acknowledgement** before confirming. See §4.1.1 for the full booking spec and remaining gaps (real payments, waiting list, reminders, timezones, rate limiting).
+
 **🟡 Partially done**
 *   The standalone (no-`appointmentId`) `/doctor/prescriptions` builder is still a demo preview hardcoded to "Dr. Anaya Rao"; the client-side PDF download preview likewise uses the demo name.
 
@@ -111,25 +113,80 @@ To ensure the Aria Health application meets the needs of its diverse user base, 
 
 ### 4.1. Core Telemedicine Functionality
 
-*   **Real-time Video/Audio Consultation:**
-    *   The system shall support secure, peer-to-peer video and audio consultations between patients and doctors.
-    *   The system shall replace the free public TURN server with a paid/authenticated service (e.g., Twilio, Cloudflare, coturn) with short-lived credentials.
-    *   The system shall implement consent-based recording functionality for consultations.
-    *   The system shall display a network quality indicator during consultations.
-    *   The system shall support screen sharing during consultations.
-    *   The system shall provide a waiting room feature for patients before consultations.
-*   **Appointment Management:**
-    *   The system shall allow patients to book, reschedule, and cancel appointments with doctors.
-    *   The system shall implement policies for appointment cancellation and rescheduling.
-    *   The system shall send automated reminders for upcoming appointments to both patients and doctors.
-    *   The system shall integrate with calendar applications (.ics) for appointment synchronization.
-    *   The system shall ensure that `saveAvailability` action is wired to the UI and persists doctor availability changes.
-    *   The system shall correctly resolve the `doctorId` for availability management.
-*   **Prescription Management:**
-    *   The system shall enable doctors to issue prescriptions that are accurately tied to specific patient IDs.
-    *   The system shall generate prescriptions in PDF format.
-    *   The system shall integrate with pharmacy or e-prescription services for direct prescription delivery.
-    *   The system shall ensure that the `issuePrescription` action persists and is not tied to hardcoded doctor/patient names.
+#### 4.1.1 Appointment Booking System (Detailed)
+
+The appointment booking system is a core user journey and must provide a smooth, intuitive, and trustworthy experience for patients while giving doctors full control over their schedule.
+
+**Patient Booking Flow:**
+1. **Doctor Discovery**
+   - Patients can search doctors using server-side search with pagination.
+   - Filters include: Specialty, Sub-specialty, Consultation Fee, Availability (Today/Tomorrow/This Week), Rating, Location (if applicable), Insurance Accepted, Language.
+   - Display doctor cards with photo, name, title, rating, number of consultations, and "Book Now" button.
+
+2. **Availability Viewing**
+   - Real-time availability calendar (weekly view preferred, with daily slots).
+   - Show available time slots in 15 or 30-minute intervals.
+   - Clearly indicate doctor’s working hours, breaks, and blocked slots.
+   - Support timezone handling (patient’s local time vs doctor’s time).
+
+3. **Booking Form**
+   - Selected date & time (pre-filled from availability).
+   - Reason for visit / Chief complaint (textarea with common templates/suggestions).
+   - Optional fields: Symptoms checklist, Upload relevant medical documents (before consultation).
+   - Consultation type: Video, Audio, or Chat-only.
+   - Patient must confirm they understand the consultation fee.
+
+4. **Payment & Confirmation**
+   - Seamless integration with payment gateway (Stripe/Razorpay) at time of booking.
+   - Show clear fee breakdown (consultation fee + taxes).
+   - Option for "Pay at Consultation" for select doctors (configurable).
+   - Instant booking confirmation with calendar invite (.ics) download/link.
+   - Booking reference number.
+
+5. **Post-Booking Features**
+   - Patient can view all upcoming/past appointments in a clean dashboard.
+   - Reschedule (subject to doctor’s policy and availability).
+   - Cancel appointment (with cancellation window and possible fee policy).
+   - Join waiting list if desired slot is unavailable.
+
+**Doctor-Side Appointment Management:**
+- View all incoming appointment requests (pending, confirmed, completed, cancelled).
+- Accept or decline requests with optional reason (for decline).
+- Auto-approve option for trusted patients (configurable).
+- Automatic calendar blocking once appointment is confirmed.
+- Ability to add notes or mark as "No-Show".
+
+**System Rules & Policies:**
+- Minimum advance booking time (e.g., 2 hours).
+- Cancellation policy: Free cancellation up to X hours before appointment; fee after that.
+- Rescheduling allowed up to Y times per appointment.
+- Double-booking prevention (real-time slot locking).
+- Automatic reminders: 24 hours & 1 hour before appointment (email + in-app + push).
+
+**Technical Requirements for Booking:**
+- Server-side validation of all booking data using Zod.
+- Optimistic UI updates with proper rollback on failure.
+- Realtime updates (new booking requests appear instantly for doctors).
+- Proper RLS policies to ensure patients can only see/modify their own bookings.
+- Rate limiting on booking endpoints.
+
+**Implementation status (updated 2026-07-14):** Booking wizard (mode → slot → details → payment), booking-slot double-booking dedup, doctor accept/decline, and realtime request delivery already shipped. Newly shipped: **patient cancel** (`cancelMyAppointment`) and **reschedule** (`rescheduleAppointment`) from the appointments dashboard with doctor notification; **calendar invite (.ics) download** and **booking reference number** on confirmation (`lib/ics.ts`); and a **fee-acknowledgement gate** before payment. Still open: real payment gateway, "Pay at Consultation", waiting list, auto-approve, no-show marking, timezone conversion, automatic reminders, Zod migration, rate limiting, and server-side paginated doctor search/filters.
+
+#### 4.1.2 Real-time Video/Audio Consultation
+*   The system shall support secure, peer-to-peer video and audio consultations between patients and doctors.
+*   The system shall replace the free public TURN server with a paid/authenticated service (e.g., Twilio, Cloudflare, coturn) with short-lived credentials.
+*   The system shall implement consent-based recording functionality for consultations.
+*   The system shall display a network quality indicator during consultations.
+*   The system shall support screen sharing during consultations.
+*   The system shall provide a waiting room feature for patients before consultations.
+
+#### 4.1.3 Prescription Management
+*   The system shall enable doctors to issue prescriptions that are accurately tied to specific patient IDs.
+*   The system shall generate prescriptions in PDF format.
+*   The system shall integrate with pharmacy or e-prescription services for direct prescription delivery.
+*   The system shall ensure that the `issuePrescription` action persists and is not tied to hardcoded doctor/patient names.
+
+#### 4.1.4 Medical Records, Chat, Doctor Search & AI Assistant
 *   **Medical Records Management:**
     *   The system shall provide secure file storage (e.g., Supabase Storage) for patient medical records, license documents, and report uploads.
     *   The system shall allow patients to view, download, and upload their medical records and reports.
@@ -220,6 +277,8 @@ To ensure the Aria Health application meets the needs of its diverse user base, 
 
 ### 5.4. Usability and UI/UX
 
+*   The system shall present a premium, calming healthcare aesthetic (teal + deep navy palette) at Hallmark-level design quality. *(Note: the current shipped design system is the PlayStation-inspired blue theme in `DESIGN-playstation.md`; adopting the teal + navy palette is a design-language change tracked here, not yet implemented in code.)*
+*   The booking flow specifically shall be clear, trustworthy, and low-friction (explicit fee acknowledgement, visible cancellation policy, booking reference, calendar invite).
 *   The system shall maintain the existing high-quality visual consistency, typography, spacing, and animations.
 *   The system shall replace all emoji used as UI icons with a consistent line-icon set.
 *   The system shall address accessibility gaps, including providing labels for icons, using multi-modal status indicators (not just color), ensuring proper focus management for modals, and providing visible value labeling for range sliders.

@@ -331,6 +331,98 @@ export async function updateAppointmentStatus(
   }
 }
 
+/* Notify the doctor behind an appointment (via their linked auth profile, if
+   any) that the patient changed the booking. Shared by cancel + reschedule. */
+async function notifyDoctorOfChange(
+  sb: ServerClient,
+  appt: { doctor_id?: string | null; patient_name?: string | null },
+  title: string,
+  body: string
+) {
+  if (!appt.doctor_id) return;
+  const { data: doc } = await sb
+    .from("doctors")
+    .select("profile_id")
+    .eq("id", appt.doctor_id)
+    .maybeSingle();
+  if (doc?.profile_id) {
+    await notify(sb, {
+      userId: String(doc.profile_id),
+      title,
+      body,
+      kind: "appointment",
+      url: "/doctor/appointments",
+    });
+  }
+}
+
+/* Patient cancels their own appointment. RLS scopes the update to the caller;
+   we also pin patient_id defensively. Notifies the doctor. No-op in mock mode. */
+export async function cancelMyAppointment(id: string): Promise<Result> {
+  if (!id) return { ok: false };
+  if (!isSupabaseConfigured) return { ok: true };
+  try {
+    const sb = await createServerSupabase();
+    const {
+      data: { user },
+    } = await sb.auth.getUser();
+    if (!user?.id) return { ok: false };
+    const { data: appt, error } = await sb
+      .from("appointments")
+      .update({ status: "Cancelled" })
+      .eq("id", id)
+      .eq("patient_id", user.id)
+      .select("doctor_id, patient_name, date_label, time_label")
+      .maybeSingle();
+    if (error || !appt) return { ok: false };
+    await notifyDoctorOfChange(
+      sb,
+      appt,
+      "Appointment cancelled",
+      `${appt.patient_name ?? "A patient"} cancelled their ${appt.date_label} ${appt.time_label} consultation.`
+    );
+    return { ok: true };
+  } catch {
+    return { ok: false };
+  }
+}
+
+/* Patient reschedules their own appointment to a new slot. Keeps the existing
+   status; moving the slot only changes date/time. Notifies the doctor. */
+export async function rescheduleAppointment(
+  id: string,
+  date: string,
+  time: string
+): Promise<Result> {
+  if (!id || !date || !time) return { ok: false };
+  if (firstError(maxLen(date, 100, "Date"), maxLen(time, 40, "Time"))) return { ok: false };
+  if (!isSupabaseConfigured) return { ok: true };
+  try {
+    const sb = await createServerSupabase();
+    const {
+      data: { user },
+    } = await sb.auth.getUser();
+    if (!user?.id) return { ok: false };
+    const { data: appt, error } = await sb
+      .from("appointments")
+      .update({ date_label: date, time_label: time })
+      .eq("id", id)
+      .eq("patient_id", user.id)
+      .select("doctor_id, patient_name")
+      .maybeSingle();
+    if (error || !appt) return { ok: false };
+    await notifyDoctorOfChange(
+      sb,
+      appt,
+      "Appointment rescheduled",
+      `${appt.patient_name ?? "A patient"} moved their consultation to ${date} at ${time}.`
+    );
+    return { ok: true };
+  } catch {
+    return { ok: false };
+  }
+}
+
 /* Doctor issues a prescription. */
 export async function issuePrescription(input: {
   patientId?: string;

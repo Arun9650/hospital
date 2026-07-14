@@ -6,6 +6,7 @@ import { Avatar, Button, Field, Stars } from "@/components/ui";
 import { bookingDays } from "@/lib/data";
 import type { Doctor } from "@/lib/data";
 import { createAppointment } from "@/lib/actions/data";
+import { appointmentIcs } from "@/lib/ics";
 
 const steps = ["Consultation", "Date & time", "Details", "Payment"];
 
@@ -28,6 +29,7 @@ export function BookingWizardClient({ doctor }: { doctor: Doctor }) {
   const [day, setDay] = useState(0);
   const [slot, setSlot] = useState<string>("");
   const [reason, setReason] = useState("");
+  const [feeAck, setFeeAck] = useState(false);
   const [done, setDone] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -71,6 +73,7 @@ export function BookingWizardClient({ doctor }: { doctor: Doctor }) {
         mode={mode}
         day={bookingDays[day]}
         slot={slot}
+        reason={reason}
         apptId={apptId}
       />
     );
@@ -203,6 +206,18 @@ export function BookingWizardClient({ doctor }: { doctor: Doctor }) {
               <div className="flex items-center gap-2 rounded-lg bg-[#eaf3fc] p-3 text-sm text-ps">
                 🔒 Payments are encrypted. You won’t be charged until the doctor confirms.
               </div>
+              <label className="flex items-start gap-2.5 text-sm text-charcoal">
+                <input
+                  type="checkbox"
+                  checked={feeAck}
+                  onChange={(e) => setFeeAck(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 shrink-0 accent-[#0070d1]"
+                />
+                <span>
+                  I understand the consultation fee is <span className="font-medium">${doctor.fee}</span>, and
+                  that free cancellation is available up to 2 hours before the appointment.
+                </span>
+              </label>
             </div>
           )}
 
@@ -226,7 +241,7 @@ export function BookingWizardClient({ doctor }: { doctor: Doctor }) {
                 Continue
               </Button>
             ) : (
-              <Button onClick={handleConfirm} loading={saving}>
+              <Button onClick={handleConfirm} loading={saving} disabled={saving || !feeAck}>
                 {saving ? "Processing…" : `Pay $${doctor.fee} & confirm`}
               </Button>
             )}
@@ -290,14 +305,38 @@ function Confirmation({
   mode,
   day,
   slot,
+  reason,
   apptId,
 }: {
   doctor: Doctor;
   mode: string;
   day: (typeof bookingDays)[number];
   slot: string;
+  reason: string;
   apptId?: string;
 }) {
+  // Reference number: stable, human-readable, derived from the appointment id.
+  const bookingRef = apptId
+    ? `ARIA-${apptId.replace(/-/g, "").slice(0, 6).toUpperCase()}`
+    : "ARIA-DEMO01";
+
+  function downloadIcs() {
+    const ics = appointmentIcs({
+      id: apptId ?? bookingRef,
+      doctorName: doctor.name,
+      mode,
+      dateLabel: `${day.label}, ${day.date}`,
+      timeLabel: slot,
+      reason,
+    });
+    const url = URL.createObjectURL(new Blob([ics], { type: "text/calendar" }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `aria-appointment-${bookingRef}.ics`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
   return (
     <div className="mx-auto max-w-2xl">
       <div className="card-flat overflow-hidden text-center">
@@ -309,6 +348,9 @@ function Confirmation({
           </div>
           <h1 className="mt-5 font-display text-3xl font-light">Appointment confirmed</h1>
           <p className="mt-2 text-white/80">Payment of ${doctor.fee} was successful. A receipt is saved to your records.</p>
+          <p className="mt-1 text-sm text-white/70">
+            Booking reference <span className="font-mono font-medium text-white">{bookingRef}</span>
+          </p>
         </div>
 
         <div className="p-8">
@@ -335,6 +377,7 @@ function Confirmation({
               </Button>
             )}
             <Button href="/patient/appointments" variant="light">View appointments</Button>
+            <Button variant="ghost" onClick={downloadIcs}>Add to calendar</Button>
           </div>
 
           <div className="mt-6 border-t border-[#eee] pt-6">

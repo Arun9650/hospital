@@ -4,6 +4,7 @@ import { Tabs } from "@/components/Tabs";
 import { AppointmentCard } from "@/components/AppointmentCard";
 import { Button, EmptyState } from "@/components/ui";
 import { RateButton } from "@/components/RateButton";
+import { PatientAppointmentActions } from "@/components/PatientAppointmentActions";
 import { RealtimeRefresh } from "@/components/RealtimeRefresh";
 import { getPatientAppointments } from "@/lib/db";
 import { getUserId } from "@/lib/auth";
@@ -38,7 +39,7 @@ export default async function AppointmentsPage() {
                 ) : (
                   <div className="stagger space-y-3">
                     {pending.map((a) => (
-                      <AppointmentCard key={a.id} appt={a} />
+                      <AppointmentCard key={a.id} appt={a} actions={<PatientAppointmentActions appt={a} />} />
                     ))}
                   </div>
                 ),
@@ -55,7 +56,7 @@ export default async function AppointmentsPage() {
                 ) : (
                   <div className="stagger space-y-3">
                     {upcoming.map((a) => (
-                      <AppointmentCard key={a.id} appt={a} />
+                      <AppointmentCard key={a.id} appt={a} actions={<PatientAppointmentActions appt={a} />} />
                     ))}
                   </div>
                 ),
