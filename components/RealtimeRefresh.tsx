@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
+import type { RealtimeChannel, SupabaseClient } from "@supabase/supabase-js";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
 
 /* -------------------------------------------------------------------------
@@ -29,27 +29,39 @@ export function RealtimeRefresh({ tables }: { tables: string[] }) {
 
   useEffect(() => {
     if (!isSupabaseConfigured || tables.length === 0) return;
-    const sb = createClient();
+    // Import the Supabase client lazily (inside the effect) rather than at module
+    // top level. That keeps the ~240KB realtime library off the page's initial
+    // hydration path — it loads after first paint, so taps stay responsive on
+    // slow mobile devices instead of waiting for that JS to parse/execute.
+    let cancelled = false;
+    let sb: SupabaseClient | null = null;
+    let channel: RealtimeChannel | null = null;
     let timer: ReturnType<typeof setTimeout> | null = null;
 
-    const bump = () => {
-      if (timer) clearTimeout(timer);
-      timer = setTimeout(() => router.refresh(), 250);
-    };
+    import("@/lib/supabase/client").then(({ createClient }) => {
+      if (cancelled) return;
+      sb = createClient();
 
-    const channel = sb.channel(`refresh:${key}`);
-    for (const table of tables) {
-      channel.on(
-        "postgres_changes",
-        { event: "*", schema: "public", table },
-        bump
-      );
-    }
-    channel.subscribe();
+      const bump = () => {
+        if (timer) clearTimeout(timer);
+        timer = setTimeout(() => router.refresh(), 250);
+      };
+
+      channel = sb.channel(`refresh:${key}`);
+      for (const table of tables) {
+        channel.on(
+          "postgres_changes",
+          { event: "*", schema: "public", table },
+          bump
+        );
+      }
+      channel.subscribe();
+    });
 
     return () => {
+      cancelled = true;
       if (timer) clearTimeout(timer);
-      sb.removeChannel(channel);
+      if (sb && channel) sb.removeChannel(channel);
     };
     // `tables` is captured via the stable `key`; router is stable.
     // eslint-disable-next-line react-hooks/exhaustive-deps

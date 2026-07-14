@@ -9,7 +9,7 @@ export function PatientShell({ children }: { children: ReactNode }) {
   const session = useSessionUser();
   const user = session
     ? { name: session.name, initials: session.initials, color: session.color, sub: "Patient" }
-    : { name: "Alex Morgan", initials: "AM", color: "#0070d1", sub: "Patient" };
+    : { name: "Alex Morgan", initials: "AM", color: "#b23a52", sub: "Patient" };
   return (
     <DashboardShell role="Patient" nav={patientNav} user={user}>
       {children}
@@ -21,7 +21,7 @@ export function DoctorShell({ children }: { children: ReactNode }) {
   const session = useSessionUser();
   const user = session
     ? { name: session.name, initials: session.initials, color: session.color, sub: "Doctor" }
-    : { name: "Dr. Anaya Rao", initials: "AR", color: "#0070d1", sub: "Cardiology" };
+    : { name: "Dr. Anaya Rao", initials: "AR", color: "#b23a52", sub: "Cardiology" };
   return (
     <DashboardShell role="Doctor" nav={doctorNav} user={user}>
       {children}

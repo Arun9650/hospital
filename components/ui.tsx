@@ -178,12 +178,12 @@ export function Section({
 }) {
   const bg =
     canvas === "dark"
-      ? "bg-black text-white"
+      ? "bg-forest text-white"
       : canvas === "blue"
       ? "bg-ps text-white"
       : canvas === "soft"
-      ? "bg-surface-soft text-black"
-      : "bg-white text-black";
+      ? "bg-surface-soft text-ink"
+      : "bg-canvas-light text-ink";
   return (
     <section id={id} className={`section ${bg} ${className}`}>
       <div className="container-x">{children}</div>

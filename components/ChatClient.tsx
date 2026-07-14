@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import type { RealtimeChannel, SupabaseClient } from "@supabase/supabase-js";
 import { Avatar } from "@/components/ui";
 import { Icon } from "@/components/Icon";
-import { createClient } from "@/lib/supabase/client";
 import { sendChatMessage } from "@/lib/actions/data";
 import { currentPatient, getDoctor } from "@/lib/data";
 import type { ChatMessage, ChatThread } from "@/lib/data";
@@ -104,45 +104,57 @@ export function ChatClient({
   }, [activeId]);
 
   // Realtime: append inserted messages that belong to a thread we're showing.
+  // The Supabase client is imported lazily (inside the effect) so its ~240KB
+  // stays off the initial hydration path — the chat UI paints and the composer
+  // stays usable while the realtime library loads in the background.
   useEffect(() => {
     if (!configured) return;
-    const sb = createClient();
-    const channel = sb
-      .channel("chat_messages")
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "chat_messages" },
-        (payload) => {
-          const row = payload.new as {
-            id: string;
-            thread_id: string;
-            sender: "patient" | "doctor";
-            body: string;
-            created_at: string;
-          };
-          setThreads((ts) => {
-            if (!ts.some((t) => t.id === row.thread_id)) return ts;
-            return ts.map((t) => {
-              if (t.id !== row.thread_id) return t;
-              if (t.messages.some((m) => m.id === row.id)) return t; // dedupe echo
-              const isMine = row.sender === ownSide;
-              const isOpen = activeIdRef.current === t.id;
-              return {
-                ...t,
-                messages: [
-                  ...t.messages,
-                  { id: row.id, from: row.sender, text: row.body, time: clockLabel(row.created_at) },
-                ],
-                lastActive: "just now",
-                unread: isMine || isOpen ? t.unread : t.unread + 1,
-              };
+    let cancelled = false;
+    let sb: SupabaseClient | null = null;
+    let channel: RealtimeChannel | null = null;
+
+    import("@/lib/supabase/client").then(({ createClient }) => {
+      if (cancelled) return;
+      sb = createClient();
+      channel = sb
+        .channel("chat_messages")
+        .on(
+          "postgres_changes",
+          { event: "INSERT", schema: "public", table: "chat_messages" },
+          (payload) => {
+            const row = payload.new as {
+              id: string;
+              thread_id: string;
+              sender: "patient" | "doctor";
+              body: string;
+              created_at: string;
+            };
+            setThreads((ts) => {
+              if (!ts.some((t) => t.id === row.thread_id)) return ts;
+              return ts.map((t) => {
+                if (t.id !== row.thread_id) return t;
+                if (t.messages.some((m) => m.id === row.id)) return t; // dedupe echo
+                const isMine = row.sender === ownSide;
+                const isOpen = activeIdRef.current === t.id;
+                return {
+                  ...t,
+                  messages: [
+                    ...t.messages,
+                    { id: row.id, from: row.sender, text: row.body, time: clockLabel(row.created_at) },
+                  ],
+                  lastActive: "just now",
+                  unread: isMine || isOpen ? t.unread : t.unread + 1,
+                };
+              });
             });
-          });
-        }
-      )
-      .subscribe();
+          }
+        )
+        .subscribe();
+    });
+
     return () => {
-      sb.removeChannel(channel);
+      cancelled = true;
+      if (sb && channel) sb.removeChannel(channel);
     };
   }, [configured, ownSide]);
 

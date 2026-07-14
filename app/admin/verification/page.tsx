@@ -4,17 +4,36 @@ import { useState } from "react";
 import { AdminShell } from "@/components/roleShells";
 import { PageHeader } from "@/components/DashboardShell";
 import { Avatar, Badge, Button } from "@/components/ui";
+import { useToast } from "@/components/Toast";
 import { verificationQueue } from "@/lib/data";
+import { decideVerification } from "@/lib/actions/data";
 
 type Decision = "pending" | "approved" | "rejected";
 
 export default function AdminVerification() {
+  const { show } = useToast();
   const [decisions, setDecisions] = useState<Record<string, Decision>>(
     Object.fromEntries(verificationQueue.map((v) => [v.id, "pending"]))
   );
+  // Which row is mid-request, so we can spin the button and block double-clicks.
+  const [busy, setBusy] = useState<Record<string, boolean>>({});
 
-  function decide(id: string, d: Decision) {
-    setDecisions((prev) => ({ ...prev, [id]: d }));
+  async function decide(id: string, d: Decision, name?: string) {
+    // Undo (back to pending) is local-only — the action persists decisions.
+    if (d === "pending") {
+      setDecisions((prev) => ({ ...prev, [id]: d }));
+      return;
+    }
+    if (busy[id]) return;
+    setBusy((prev) => ({ ...prev, [id]: true }));
+    const res = await decideVerification(id, d);
+    setBusy((prev) => ({ ...prev, [id]: false }));
+    if (res.ok) {
+      setDecisions((prev) => ({ ...prev, [id]: d }));
+      show(`${name ?? "Doctor"} ${d === "approved" ? "approved" : "rejected"}`, d === "approved" ? "success" : "info");
+    } else {
+      show("Couldn't save that decision. Please try again.", "error");
+    }
   }
 
   const pending = Object.values(decisions).filter((d) => d === "pending").length;
@@ -55,9 +74,20 @@ export default function AdminVerification() {
                 <div className="flex shrink-0 gap-2">
                   {d === "pending" ? (
                     <>
-                      <Button size="sm" onClick={() => decide(v.id, "approved")}>Approve</Button>
+                      <Button
+                        size="sm"
+                        loading={busy[v.id]}
+                        disabled={busy[v.id]}
+                        onClick={() => decide(v.id, "approved", v.name)}
+                      >
+                        Approve
+                      </Button>
                       <button className="btn btn-light btn-sm">Documents</button>
-                      <button className="btn btn-sm bg-[#fbe7ea] text-warning" onClick={() => decide(v.id, "rejected")}>
+                      <button
+                        className="btn btn-sm bg-[#fbe7ea] text-warning disabled:opacity-60"
+                        disabled={busy[v.id]}
+                        onClick={() => decide(v.id, "rejected", v.name)}
+                      >
                         Reject
                       </button>
                     </>

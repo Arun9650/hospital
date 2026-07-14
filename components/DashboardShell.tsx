@@ -27,7 +27,7 @@ export function DashboardShell({
   return (
     <div className="min-h-screen bg-surface-soft">
       {/* Top bar */}
-      <header className="sticky top-0 z-40 border-b border-[#e7e7e7] bg-white">
+      <header className="sticky top-0 z-40 border-b border-[#efe4d4] bg-canvas-light">
         <div className="flex h-16 items-center justify-between px-4 sm:px-6">
           <div className="flex items-center gap-3">
             <button
@@ -76,7 +76,7 @@ export function DashboardShell({
       <div className="flex">
         {/* Sidebar */}
         <aside
-          className={`fixed inset-y-0 left-0 top-16 z-30 flex w-64 transform flex-col border-r border-[#e7e7e7] bg-white transition-transform lg:sticky lg:top-16 lg:h-[calc(100vh-4rem)] lg:translate-x-0 ${
+          className={`fixed inset-y-0 left-0 top-16 z-30 flex w-64 transform flex-col border-r border-[#efe4d4] bg-canvas-light transition-transform lg:sticky lg:top-16 lg:h-[calc(100vh-4rem)] lg:translate-x-0 ${
             open ? "translate-x-0" : "-translate-x-full"
           }`}
         >
@@ -90,7 +90,7 @@ export function DashboardShell({
                   onClick={() => setOpen(false)}
                   className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
                     active
-                      ? "bg-[#eaf3fc] text-ps"
+                      ? "bg-[#f7e7e9] text-ps"
                       : "text-charcoal hover:bg-surface-soft"
                   }`}
                 >
@@ -100,7 +100,7 @@ export function DashboardShell({
               );
             })}
           </nav>
-          <div className="shrink-0 space-y-1 border-t border-[#e7e7e7] p-4">
+          <div className="shrink-0 space-y-1 border-t border-[#efe4d4] p-4">
             <Link
               href="/"
               className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-mute transition-colors hover:bg-surface-soft"

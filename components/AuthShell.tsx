@@ -14,7 +14,7 @@ export function AuthShell({
   return (
     <div className="grid min-h-screen lg:grid-cols-2">
       {/* Left — brand panel (dark canvas) */}
-      <div className="relative hidden overflow-hidden bg-black text-white lg:flex lg:flex-col lg:justify-between lg:p-12">
+      <div className="relative hidden overflow-hidden bg-forest text-white lg:flex lg:flex-col lg:justify-between lg:p-12">
         <div className="pointer-events-none absolute -left-20 top-10 h-96 w-96 rounded-full bg-ps/25 blur-[120px]" />
         <div className="relative">
           <Logo dark />
@@ -34,7 +34,7 @@ export function AuthShell({
       </div>
 
       {/* Right — form panel (light canvas) */}
-      <div className="flex flex-col justify-center bg-white px-6 py-12 sm:px-12 lg:px-16">
+      <div className="flex flex-col justify-center bg-canvas-light px-6 py-12 sm:px-12 lg:px-16">
         <div className="mx-auto w-full max-w-md">
           <div className="mb-8 lg:hidden">
             <Logo />

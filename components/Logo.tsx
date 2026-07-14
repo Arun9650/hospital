@@ -16,7 +16,7 @@ export function Logo({ dark = false }: { dark?: boolean }) {
       </span>
       <span
         className={`font-display text-lg font-medium tracking-tight ${
-          dark ? "text-white" : "text-black"
+          dark ? "text-white" : "text-ink"
         }`}
       >
         Aria&nbsp;Health

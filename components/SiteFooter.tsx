@@ -83,7 +83,7 @@ export function SiteFooter() {
 
         <div className="mt-12 flex flex-col gap-3 border-t border-white/15 pt-6 text-xs text-white/70 sm:flex-row sm:items-center sm:justify-between">
           <p>© 2026 Aria Health. For demonstration only — not a real medical service.</p>
-          <p>Made with the PlayStation-inspired design system.</p>
+          <p>Made with warmth — a cozy, Hallmark-inspired design system.</p>
         </div>
       </div>
     </footer>

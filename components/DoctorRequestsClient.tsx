@@ -148,7 +148,7 @@ export function DoctorRequestsClient({ requests }: { requests: Appointment[] }) 
                     </div>
                   </div>
                   <div className="flex shrink-0 gap-2">
-                    <Button href="/doctor/prescriptions" variant="light" size="sm">Prescription</Button>
+                    <Button href={`/doctor/prescriptions?appointmentId=${r.id}`} variant="light" size="sm">Prescription</Button>
                     <Button href="/doctor/patients" variant="ghost" size="sm">History</Button>
                   </div>
                 </div>

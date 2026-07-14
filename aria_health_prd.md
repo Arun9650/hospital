@@ -23,6 +23,30 @@ The scope of this PRD encompasses the development and implementation of core tel
 *   **Zod:** A TypeScript-first schema declaration and validation library.
 
 
+### 1.4. Implementation Status Snapshot (updated 2026-07-14)
+
+Since the original audit, several Phase 1 ("harden the demo") items have shipped. This snapshot reflects the **current codebase**; the requirements in sections 4–5 remain the target end-state.
+
+**✅ Shipped since the audit**
+*   **Doctor identity resolution** — the dashboard now resolves the real doctor catalog id instead of passing the doctor's name, so live appointment requests match. (`app/doctor/dashboard/page.tsx`)
+*   **Real doctor schedule** — "Today's schedule" derives from the doctor's actual appointments, chronologically sorted, with an empty state (was a hardcoded array).
+*   **Doctor availability save** — `saveAvailability` is wired through `AvailabilityClient` and persists.
+*   **Prescriptions** — PDF generation (`lib/prescriptionPdf.ts`, `PrescriptionDownloadButton`) and in-consultation issuance tied to the appointment/patient (`issuePrescriptionForAppointment`, `CallPrescriptionPanel`).
+*   **Notifications** — realtime INSERT stream plus mark-as-read / unread counts (`NotificationsRealtime`, `markNotificationsRead`).
+*   **Live refresh** — pages re-fetch on relevant table changes (`RealtimeRefresh`).
+*   **Interaction feedback** — link/submit spinners (`LinkPending`, `SubmitButton`, `Button loading`); stray debug `console.log`s removed.
+*   **Mobile performance** — the ~246 KB Supabase realtime client is lazy-`import()`ed inside effects (Chat, Notifications, RealtimeRefresh) so it stays off the initial hydration path and taps stay responsive.
+*   **Admin verification persistence** — `decideVerification` is now wired in `app/admin/verification/page.tsx` with optimistic state, a busy/disabled spinner, and success/error toasts.
+*   **Prescription builder patient tie** — launched from a completed consultation (`/doctor/prescriptions?appointmentId=…`) it now issues via `issuePrescriptionForAppointment`, which resolves the real patient and doctor server-side; the header drops the hardcoded demo name in that mode. The no-arg builder remains a demo preview.
+*   **Route-level loading & error** — root `app/loading.tsx` (Suspense spinner) and `app/error.tsx` (recoverable error boundary with retry) now cover every route.
+
+**🟡 Partially done**
+*   The standalone (no-`appointmentId`) `/doctor/prescriptions` builder is still a demo preview hardcoded to "Dr. Anaya Rao"; the client-side PDF download preview likewise uses the demo name.
+
+**🔴 Not started (unchanged from the audit)**
+*   Payments, role-aware RLS, file storage, profile & settings pages (none exist), forgot/reset password, social login, server-side (Zod) validation, pagination / server-side search, real LLM assistant, admin content management, real analytics, paid TURN.
+
+
 ## 2. Goals and Objectives
 
 The primary goal of this product development effort is to transform the Aria Health application from a high-fidelity prototype into a production-ready, secure, and scalable telemedicine platform capable of supporting real patient care. This will be achieved by focusing on the following key objectives:
@@ -223,7 +247,7 @@ The following items are explicitly out of scope for the immediate next phase of 
 
 The development of Aria Health will follow a phased approach:
 
-*   **Phase 1: Harden the Demo (Immediate):** Focus on fixing critical bugs (e.g., doctor-id resolution), wiring unwired actions (availability, verification), adding loading/error states, and removing debug code.
+*   **Phase 1: Harden the Demo (Immediate):** **Complete (see §1.4).** Doctor-id resolution, availability wiring, prescription PDF/issuance + patient tie, admin verification persistence, realtime notifications, interaction feedback, route-level loading/error boundaries, and mobile bundle performance are all done. The app is now a flawless demo; remaining gaps are Phase 2+ product work.
 *   **Phase 2: Make it Real (Short-term):** Implement core production features including Role-Aware RLS, payment integration, file storage, comprehensive profile/settings management, and server-side validation.
 *   **Phase 3: Compliance & Scale (Medium-term):** Address HIPAA/GDPR compliance, implement real notifications/email, introduce pagination and server-side search, integrate a real AI assistant, and enhance analytics.
 *   **Phase 4: Differentiate (Long-term):** Integrate advanced features such as lab/pharmacy services, insurance integration, wearables connectivity, and care-team/referral management.

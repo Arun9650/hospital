@@ -1,0 +1,65 @@
+/* Hallmark · macrostructure: Stat-Led · tone: luxury-calm healthcare · anchor hue: teal 182
+ * genre: modern-minimal · theme: custom tuned (paper oklch(99% .004 210) · accent oklch(72% .13 182) teal · Fraunces + Inter)
+ * axes: light paper / soft-serif display / cool accent
+ * pre-emit critique: P5 H5 E4 S5 R5 V4
+ */
+@import url("https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600;700&display=swap");
+
+:root {
+  /* paper + ink */
+  --v-paper:      oklch(99% 0.004 210);
+  --v-paper-2:    oklch(97.2% 0.006 205);
+  --v-paper-3:    oklch(94.5% 0.009 200);
+  --v-ink:        oklch(25% 0.035 236);
+  --v-ink-2:      oklch(38% 0.03 236);
+  --v-muted:      oklch(53% 0.022 232);
+  --v-line:       oklch(90.5% 0.008 220);
+  --v-line-soft:  oklch(94% 0.006 220);
+
+  /* accent — teal reserved for primary + emphasis only */
+  --v-teal:       oklch(72% 0.13 182);   /* ~#14b8a6 */
+  --v-teal-deep:  oklch(52% 0.10 184);   /* teal text on light */
+  --v-teal-soft:  oklch(96% 0.03 184);
+  --v-teal-line:  oklch(88% 0.06 184);
+
+  /* dark canvases (navy) */
+  --v-navy:       oklch(22% 0.035 240);
+  --v-navy-2:     oklch(27% 0.04 238);
+  --v-navy-line:  oklch(38% 0.03 236);
+  --v-on-navy:    oklch(96% 0.006 210);
+  --v-on-navy-mut:oklch(74% 0.015 216);
+
+  /* fonts */
+  --v-font-display: "Fraunces", ui-serif, Georgia, serif;
+  --v-font-body:    "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
+
+  /* type scale */
+  --v-text-xs:   0.8125rem;
+  --v-text-sm:   0.9375rem;
+  --v-text-base: 1.0625rem;
+  --v-text-lg:   1.1875rem;
+  --v-text-xl:   1.4rem;
+  --v-text-2xl:  clamp(1.6rem, 1.1rem + 2.2vw, 2.15rem);
+  --v-text-3xl:  clamp(2.05rem, 1.3rem + 3.4vw, 3.1rem);
+  --v-display-s: clamp(2.5rem, 1.4rem + 5vw, 4rem);
+  --v-display:   clamp(3rem, 1.5rem + 7vw, 5.4rem);
+
+  /* spacing (4pt) */
+  --v-1: 4px;  --v-2: 8px;  --v-3: 12px; --v-4: 16px;
+  --v-5: 24px; --v-6: 32px; --v-7: 48px; --v-8: 64px;
+  --v-9: 96px; --v-10: 128px;
+
+  /* radii */
+  --v-r-sm: 10px; --v-r-md: 16px; --v-r-lg: 24px; --v-r-pill: 999px;
+
+  /* motion */
+  --v-ease-out:    cubic-bezier(0.22, 1, 0.36, 1);
+  --v-ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --v-dur:   0.6s;
+  --v-dur-s: 0.28s;
+
+  /* shadow — minimal, soft */
+  --v-shadow-sm: 0 1px 2px oklch(25% 0.035 236 / 0.05);
+  --v-shadow-md: 0 18px 50px -24px oklch(25% 0.05 236 / 0.28);
+  --v-shadow-lg: 0 40px 90px -40px oklch(25% 0.06 236 / 0.35);
+}

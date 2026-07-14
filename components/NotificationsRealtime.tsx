@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import type { RealtimeChannel, SupabaseClient } from "@supabase/supabase-js";
 import { NotificationsView } from "./NotificationsView";
-import { createClient } from "@/lib/supabase/client";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
 import { relativeTime } from "@/lib/time";
 import { markNotificationsRead } from "@/lib/actions/data";
@@ -78,28 +78,40 @@ export function NotificationsRealtime({
   const [now, setNow] = useState<number | null>(null);
   const [marking, setMarking] = useState(false);
 
-  // Live INSERTs → prepend to the top.
+  // Live INSERTs → prepend to the top. The Supabase realtime client is imported
+  // lazily here (not at module top level) so its ~240KB stays off the initial
+  // hydration path — the notifications list paints and stays tappable while that
+  // library loads in the background.
   useEffect(() => {
     if (!isSupabaseConfigured) return;
-    const sb = createClient();
-    const channel = sb
-      .channel("notifications-feed")
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "notifications" },
-        (payload) => {
-          const row = payload.new as NotificationRow;
-          // Only surface notifications addressed to me, plus global demo rows.
-          const mine = !row.user_id || (userId ? row.user_id === userId : false);
-          if (!mine) return;
-          setItems((prev) =>
-            prev.some((n) => n.id === String(row.id)) ? prev : [mapRow(row), ...prev]
-          );
-        }
-      )
-      .subscribe();
+    let cancelled = false;
+    let sb: SupabaseClient | null = null;
+    let channel: RealtimeChannel | null = null;
+
+    import("@/lib/supabase/client").then(({ createClient }) => {
+      if (cancelled) return;
+      sb = createClient();
+      channel = sb
+        .channel("notifications-feed")
+        .on(
+          "postgres_changes",
+          { event: "INSERT", schema: "public", table: "notifications" },
+          (payload) => {
+            const row = payload.new as NotificationRow;
+            // Only surface notifications addressed to me, plus global demo rows.
+            const mine = !row.user_id || (userId ? row.user_id === userId : false);
+            if (!mine) return;
+            setItems((prev) =>
+              prev.some((n) => n.id === String(row.id)) ? prev : [mapRow(row), ...prev]
+            );
+          }
+        )
+        .subscribe();
+    });
+
     return () => {
-      sb.removeChannel(channel);
+      cancelled = true;
+      if (sb && channel) sb.removeChannel(channel);
     };
   }, [userId]);
 

@@ -1,11 +1,12 @@
 "use client";
 
 import { useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { DoctorShell } from "@/components/roleShells";
 import { PageHeader } from "@/components/DashboardShell";
 import { Avatar, Badge, Button } from "@/components/ui";
 import { useToast } from "@/components/Toast";
-import { issuePrescription } from "@/lib/actions/data";
+import { issuePrescription, issuePrescriptionForAppointment } from "@/lib/actions/data";
 import { downloadPrescriptionPdf } from "@/lib/prescriptionPdf";
 
 type Med = { name: string; dose: string; frequency: string; duration: string };
@@ -24,8 +25,12 @@ export default function PrescriptionBuilder() {
   const [saving, setSaving] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const { show } = useToast();
+  // When opened from a completed consultation (…?appointmentId=…) the prescription
+  // is tied to that appointment's real patient — the server action resolves the
+  // patient and doctor from the appointment. Without it, this is the demo builder.
+  const appointmentId = useSearchParams().get("appointmentId");
 
-  // Demo patient for this builder (mirrors the header badge).
+  // Demo patient for the standalone builder (mirrors the header badge).
   const patientName = "Rohan Mehta";
 
   async function handleDownload() {
@@ -51,14 +56,10 @@ export default function PrescriptionBuilder() {
 
   async function handleIssue() {
     setSaving(true);
-    const res = await issuePrescription({
-      doctorName: "Dr. Anaya Rao",
-      specialty: "Cardiology",
-      diagnosis,
-      medicines: meds.filter((m) => m.name),
-      tests,
-      notes,
-    });
+    const clinical = { diagnosis, medicines: meds.filter((m) => m.name), tests, notes };
+    const res = appointmentId
+      ? await issuePrescriptionForAppointment(appointmentId, clinical)
+      : await issuePrescription({ doctorName: "Dr. Anaya Rao", specialty: "Cardiology", ...clinical });
     setSaving(false);
     if (res.ok) {
       setIssued(true);
@@ -85,8 +86,14 @@ export default function PrescriptionBuilder() {
     <DoctorShell>
       <PageHeader
         title="Prescription builder"
-        subtitle="Create a digital prescription for Rohan Mehta."
-        action={<Badge tone="soft">Patient: Rohan Mehta</Badge>}
+        subtitle={
+          appointmentId
+            ? "Create a digital prescription for this consultation."
+            : `Create a digital prescription for ${patientName}.`
+        }
+        action={
+          appointmentId ? undefined : <Badge tone="soft">Patient: {patientName}</Badge>
+        }
       />
 
       <div className="grid gap-6 lg:grid-cols-[1fr_420px]">
