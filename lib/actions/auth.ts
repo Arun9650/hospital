@@ -1,6 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { headers } from "next/headers";
 import { createServerSupabase } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
 import { specialties } from "@/lib/data";
@@ -191,4 +192,43 @@ export async function signOut() {
     await sb.auth.signOut({ scope: "local" });
   }
   redirect("/");
+}
+
+/* Send a password-reset email. The link routes through /auth/callback, which
+   exchanges the code for a (recovery) session and lands the user on
+   /reset-password. No-op in mock mode. */
+export async function requestPasswordReset(formData: FormData) {
+  const email = String(formData.get("email") ?? "").trim();
+  if (isSupabaseConfigured && email) {
+    const sb = await createServerSupabase();
+    const h = await headers();
+    const origin = `${h.get("x-forwarded-proto") ?? "http"}://${h.get("host")}`;
+    await sb.auth.resetPasswordForEmail(email, {
+      redirectTo: `${origin}/auth/callback?next=/reset-password`,
+    });
+  }
+  // Always report "sent" — never reveal whether an account exists for that email.
+  redirect(`/forgot-password?sent=${encodeURIComponent(email)}`);
+}
+
+/* Set a new password for the user in the current (recovery) session, then sign
+   out so they log in fresh with it. No-op in mock mode. */
+export async function updatePassword(formData: FormData) {
+  const password = String(formData.get("password") ?? "");
+  if (password.length < 8) {
+    redirect(`/reset-password?error=${encodeURIComponent("Password must be at least 8 characters.")}`);
+  }
+  if (isSupabaseConfigured) {
+    const sb = await createServerSupabase();
+    const {
+      data: { user },
+    } = await sb.auth.getUser();
+    if (!user) {
+      redirect(`/reset-password?error=${encodeURIComponent("Your reset link has expired. Request a new one.")}`);
+    }
+    const { error } = await sb.auth.updateUser({ password });
+    if (error) redirect(`/reset-password?error=${encodeURIComponent(error.message)}`);
+    await sb.auth.signOut({ scope: "local" });
+  }
+  redirect(`/login?reset=1`);
 }

@@ -7,9 +7,9 @@ import { signIn, resendConfirmation } from "@/lib/actions/auth";
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string; next?: string; check_email?: string; email?: string }>;
+  searchParams: Promise<{ error?: string; next?: string; check_email?: string; email?: string; reset?: string }>;
 }) {
-  const { error, next, check_email, email } = await searchParams;
+  const { error, next, check_email, email, reset } = await searchParams;
   const unconfirmed = error === "unconfirmed";
   return (
     <AuthShell>
@@ -21,6 +21,11 @@ export default async function LoginPage({
         Continue where you left off — your care, records and doctors.
       </p>
 
+      {reset && (
+        <p className="mt-4 rounded-lg bg-[#e5f5ee] px-4 py-3 text-sm text-success">
+          Your password has been updated. Log in with your new password.
+        </p>
+      )}
       {check_email && (
         <p className="mt-4 rounded-lg bg-[#e5f5ee] px-4 py-3 text-sm text-success">
           Almost there — we sent a confirmation link to{" "}
@@ -65,7 +70,9 @@ export default async function LoginPage({
           <label className="flex items-center gap-2 text-charcoal">
             <input type="checkbox" className="h-4 w-4 accent-[#0070d1]" defaultChecked /> Remember me
           </label>
-          <span className="text-mute">Forgot password? Contact support.</span>
+          <Link href="/forgot-password" className="text-mute hover:text-charcoal hover:underline">
+            Forgot password?
+          </Link>
         </div>
         <SubmitButton full>Log in</SubmitButton>
       </form>
