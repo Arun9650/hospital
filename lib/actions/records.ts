@@ -64,7 +64,8 @@ export async function uploadMedicalRecord(
       return { ok: false, error: "Couldn't upload the file. Please try again." };
     }
 
-    const { data: pub } = sb.storage.from("medical-records").getPublicUrl(path);
+    // Private bucket (0011): store only the path. Signed URLs are minted per
+    // read in lib/db.getMedicalRecords — no public URL is persisted.
     const meta = user.user_metadata ?? {};
     const { error: insErr } = await sb.from("medical_records").insert({
       id: crypto.randomUUID(),
@@ -78,7 +79,6 @@ export async function uploadMedicalRecord(
       }),
       issued_by: (meta.full_name as string) || "You",
       size: formatBytes(file.size),
-      file_url: pub.publicUrl,
       file_path: path,
     });
     if (insErr) {

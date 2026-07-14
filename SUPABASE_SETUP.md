@@ -60,15 +60,23 @@ Open the **SQL Editor** in Supabase and run, in order:
 8. `supabase/migrations/0008_storage.sql` — `consultation-files` Storage bucket + policies for in-call file sharing.
 9. `supabase/migrations/0009_realtime_tables.sql` — stream `appointments` & `prescriptions` live so lists refresh without a manual reload.
 10. `supabase/migrations/0010_medical_records_files.sql` — `file_url`/`file_path` columns + a `medical-records` Storage bucket (uploads namespaced by user id) for patient-uploaded reports.
-11. `supabase/seed.sql` — demo specialties, doctors, reviews, appointments, etc.
-12. `supabase/seed_chat.sql` — demo chat threads & messages.
-13. `supabase/seed_patients.sql` — demo patient records for Dr. Anaya Rao's panel.
+11. `supabase/migrations/0011_role_aware_rls.sql` — **role-aware read RLS** for appointments, prescriptions, medical_records, notifications, chat, and profiles (patient/doctor/admin scoped; seeded NULL-owner demo rows stay visible), plus flips `medical-records` to a **private** bucket with owner/admin read.
+12. `supabase/seed.sql` — demo specialties, doctors, reviews, appointments, etc.
+13. `supabase/seed_chat.sql` — demo chat threads & messages.
+14. `supabase/seed_patients.sql` — demo patient records for Dr. Anaya Rao's panel.
 
-> **File storage:** `0008_storage.sql` (`consultation-files`) and `0010_medical_records_files.sql`
-> (`medical-records`) both create **public** buckets so a shared link works without minting
-> signed URLs. For real PHI, make these buckets private and switch the upload code to
-> `createSignedUrl()` before production. `medical-records` uploads are namespaced by user id
-> and the insert policy enforces that a user can only write into their own folder.
+> **File storage:** `0008_storage.sql` (`consultation-files`) is a **public** bucket so a shared
+> in-call link works for both parties. `medical-records` starts public in `0010` and is flipped
+> **private** by `0011`; the app mints short-lived signed URLs on read (`lib/db.getMedicalRecords`)
+> and uploads are namespaced by user id (insert + read policies scope each user to their own folder).
+> For `consultation-files`, make it private + signed before production too.
+
+> **Role-aware RLS (`0011`):** authorisation keys off `public.profiles.role` (set by the sign-up
+> trigger, not the user-editable JWT metadata). It scopes **reads**; write checks stay permissive
+> for now because some flows write cross-user (a doctor's action inserts the patient's
+> notification; booking uses a security-definer RPC). The app's PHI readers use the auth-aware
+> server client so RLS runs as the signed-in user — run this migration or those lists fall back to
+> mock data. Tightening writes is a follow-up.
 
 (Or, with the Supabase CLI: `supabase db push` then run the seed files.)
 

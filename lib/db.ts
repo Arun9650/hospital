@@ -8,6 +8,7 @@
 
 import { isSupabaseConfigured } from "./supabase/config";
 import { createPublicClient } from "./supabase/public";
+import { createServerSupabase } from "./supabase/server";
 import { getUserId } from "./auth";
 import { relativeTime, shortTime } from "./time";
 import * as mock from "./data";
@@ -295,7 +296,7 @@ export async function getReviews(doctorId?: string): Promise<Review[]> {
 export async function getPatientAppointments(userId?: string): Promise<Appointment[]> {
   if (!isSupabaseConfigured) return mock.appointments;
   try {
-    const sb = createPublicClient();
+    const sb = await createServerSupabase();
     const { data, error } = await sb
   .from("appointments")
   .select("*")
@@ -357,7 +358,7 @@ export async function getDoctorAvailability(doctorId: string): Promise<Availabil
 export async function getDoctorAppointments(doctorId: string): Promise<Appointment[]> {
   if (!isSupabaseConfigured) return mock.appointmentRequests;
   try {
-    const sb = createPublicClient();
+    const sb = await createServerSupabase();
     const { data, error } = await sb
       .from("appointments")
       .select("*")
@@ -379,7 +380,7 @@ export async function getDoctorAppointments(doctorId: string): Promise<Appointme
 export async function getDoctorPatients(doctorId: string): Promise<Patient[]> {
   if (!isSupabaseConfigured || !doctorId) return [];
   try {
-    const sb = createPublicClient();
+    const sb = await createServerSupabase();
     const { data, error } = await sb
       .from("appointments")
       .select(
@@ -397,7 +398,7 @@ export async function getDoctorPatients(doctorId: string): Promise<Patient[]> {
 export async function getPrescriptions(userId?: string): Promise<Prescription[]> {
   if (!isSupabaseConfigured) return mock.prescriptions;
   try {
-    const sb = createPublicClient();
+    const sb = await createServerSupabase();
     const filter = userId ? `patient_id.eq.${userId},patient_id.is.null` : `patient_id.is.null`;
     const { data, error } = await sb
       .from("prescriptions")
@@ -414,11 +415,29 @@ export async function getPrescriptions(userId?: string): Promise<Prescription[]>
 export async function getMedicalRecords(userId?: string): Promise<MedicalRecord[]> {
   if (!isSupabaseConfigured) return mock.medicalRecords;
   try {
-    const sb = createPublicClient();
+    const sb = await createServerSupabase();
     const filter = userId ? `patient_id.eq.${userId},patient_id.is.null` : `patient_id.is.null`;
     const { data, error } = await sb.from("medical_records").select("*").or(filter);
     if (error || !data?.length) return mock.medicalRecords;
-    return data.map(mapRecord);
+
+    // The medical-records bucket is private (0011): mint short-lived signed URLs
+    // per read from the stored file_path so View/Download work under RLS.
+    const rows = data as Row[];
+    const paths = rows.map((r) => r.file_path).filter(Boolean) as string[];
+    const signed = new Map<string, string>();
+    if (paths.length) {
+      const { data: urls } = await sb.storage
+        .from("medical-records")
+        .createSignedUrls(paths, 3600);
+      for (const u of urls ?? []) {
+        if (u.path && u.signedUrl) signed.set(u.path, u.signedUrl);
+      }
+    }
+    return rows.map((r) => {
+      const rec = mapRecord(r);
+      const path = r.file_path ? String(r.file_path) : "";
+      return { ...rec, url: path ? signed.get(path) : undefined };
+    });
   } catch {
     return mock.medicalRecords;
   }
@@ -431,7 +450,7 @@ export async function getMedicalRecords(userId?: string): Promise<MedicalRecord[
  * retry unordered so real notifications aren't hidden behind a missing column.
  */
 async function fetchNotifications(filter: string): Promise<NotificationItem[] | null> {
-  const sb = createPublicClient();
+  const sb = await createServerSupabase();
   let res = await sb
     .from("notifications")
     .select("*")
@@ -491,7 +510,7 @@ export async function getChatThreads(
     perspective === "patient" ? mock.patientChatThreads : mock.doctorChatThreads;
   if (!isSupabaseConfigured) return fallback;
   try {
-    const sb = createPublicClient();
+    const sb = await createServerSupabase();
     let q = sb
       .from("chat_threads")
       .select("*, doctor:doctors(name, initials, photo, specialty)");
@@ -547,7 +566,7 @@ export async function getVerificationQueue() {
 export async function getAdminPatients() {
   if (!isSupabaseConfigured) return mock.adminPatients;
   try {
-    const sb = createPublicClient();
+    const sb = await createServerSupabase();
     const { data, error } = await sb.from("profiles").select("*").eq("role", "patient");
     if (error || !data?.length) return mock.adminPatients;
     return data.map((r: Row) => ({
@@ -569,7 +588,7 @@ export async function getAdminPatients() {
 export async function getAdminAppointments() {
   if (!isSupabaseConfigured) return mock.adminAppointments;
   try {
-    const sb = createPublicClient();
+    const sb = await createServerSupabase();
     const { data, error } = await sb
       .from("appointments")
       .select("*")
@@ -593,7 +612,7 @@ export async function getAdminAppointments() {
 export async function getAdminStats() {
   if (!isSupabaseConfigured) return mock.adminStats;
   try {
-    const sb = createPublicClient();
+    const sb = await createServerSupabase();
     const head = { count: "exact" as const, head: true };
     const [patients, doctors, appts, pending] = await Promise.all([
       sb.from("profiles").select("*", head).eq("role", "patient"),
