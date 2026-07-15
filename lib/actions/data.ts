@@ -220,6 +220,11 @@ export async function createAppointment(input: {
       });
     }
 
+    await logAudit(sb, "appointment.book", "appointment", appointmentId, {
+      doctorId: input.doctorId,
+      slot: `${input.date} ${input.time}`,
+      mode: input.mode,
+    });
     return { ok: true, id: appointmentId };
   } catch (err) {
     console.error("[booking] unexpected error", err);
@@ -252,6 +257,7 @@ export async function sendChatMessage(input: {
       .from("chat_threads")
       .update({ updated_at: new Date().toISOString() })
       .eq("id", input.threadId);
+    await logAudit(sb, "chat.message", "chat_thread", input.threadId, { sender: input.sender });
     return { ok: true, id: String(data.id), time: shortTime(data.created_at) };
   } catch {
     return { ok: false };
@@ -385,6 +391,7 @@ export async function cancelMyAppointment(id: string): Promise<Result> {
       "Appointment cancelled",
       `${appt.patient_name ?? "A patient"} cancelled their ${appt.date_label} ${appt.time_label} consultation.`
     );
+    await logAudit(sb, "appointment.cancel", "appointment", id, {});
     return { ok: true };
   } catch {
     return { ok: false };
@@ -421,6 +428,7 @@ export async function rescheduleAppointment(
       "Appointment rescheduled",
       `${appt.patient_name ?? "A patient"} moved their consultation to ${date} at ${time}.`
     );
+    await logAudit(sb, "appointment.reschedule", "appointment", id, { slot: `${date} ${time}` });
     return { ok: true };
   } catch {
     return { ok: false };

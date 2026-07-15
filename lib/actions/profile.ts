@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createServerSupabase } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
 import { firstError, maxLen, required } from "@/lib/validate";
+import { logAudit } from "@/lib/audit";
 
 type Result = { ok: boolean; error?: string };
 
@@ -53,6 +54,7 @@ export async function updateProfile(input: {
     if (error) return { ok: false, error: error.message };
 
     await sb.auth.updateUser({ data: { full_name, initials } });
+    await logAudit(sb, "profile.update", "profile", user.id, {});
     revalidatePath("/", "layout");
     return { ok: true };
   } catch {
