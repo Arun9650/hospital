@@ -85,6 +85,18 @@ export type ServiceItem = {
   icon: string;
 };
 
+/** One row of the admin audit trail (see supabase 0016_audit_log.sql). */
+export type AuditEntry = {
+  id: string;
+  actor: string;
+  actorRole?: string;
+  action: string;
+  target: string;
+  meta: Record<string, unknown>;
+  time: string;
+  createdAt?: string;
+};
+
 /** One entry in a patient's recent clinical timeline. */
 export type PatientHistory = { date: string; title: string; by: string };
 
@@ -779,6 +791,15 @@ export const adminAppointments = [
   { id: "aa3", patient: "Sara Iqbal", doctor: "Dr. Sofia Mendes", date: "Today, 2:00 PM", mode: "Video", status: "Completed", fee: 32 },
   { id: "aa4", patient: "Tom Becker", doctor: "Dr. David Chen", date: "Yesterday", mode: "Chat", status: "Completed", fee: 25 },
   { id: "aa5", patient: "Ahmed Farah", doctor: "Dr. Anaya Rao", date: "Tomorrow, 10:00 AM", mode: "Video", status: "Upcoming", fee: 45 },
+];
+
+// Demo audit trail — mirrors what log_audit() records once the backend is wired.
+export const auditLog: AuditEntry[] = [
+  { id: "al1", actor: "Dr. Anaya Rao", actorRole: "doctor", action: "prescription.issue", target: "prescription · rx-2041", meta: { diagnosis: "Hypertension" }, time: "12 minutes ago" },
+  { id: "al2", actor: "Admin", actorRole: "admin", action: "verification.decide", target: "verification · vq3", meta: { status: "approved" }, time: "1 hour ago" },
+  { id: "al3", actor: "Rohan Mehta", actorRole: "patient", action: "record.upload", target: "medical_record", meta: { type: "Lab Report" }, time: "3 hours ago" },
+  { id: "al4", actor: "Dr. Sofia Mendes", actorRole: "doctor", action: "appointment.status_change", target: "appointment · aa3", meta: { status: "Completed" }, time: "Yesterday" },
+  { id: "al5", actor: "Admin", actorRole: "admin", action: "verification.decide", target: "verification · vq1", meta: { status: "rejected" }, time: "Yesterday" },
 ];
 
 export function getDoctor(id: string): Doctor | undefined {

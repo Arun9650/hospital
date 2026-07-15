@@ -23,6 +23,7 @@ import type {
   ChatThread,
   ChatMessage,
   Patient,
+  AuditEntry,
 } from "./data";
 
 /** Demo patient name used for seeded (NULL-patient) chat threads. */
@@ -714,6 +715,50 @@ export async function getAdminAppointments() {
     }));
   } catch {
     return mock.adminAppointments;
+  }
+}
+
+export type AuditPage = { entries: AuditEntry[]; total: number };
+
+const AUDIT_PAGE_SIZE = 30;
+
+function mapAuditEntry(r: Row): AuditEntry {
+  const actor = (r.actor as Row) ?? {};
+  const createdAt = r.created_at ? String(r.created_at) : undefined;
+  return {
+    id: String(r.id),
+    actor: String(actor.full_name || "System"),
+    actorRole: actor.role ? String(actor.role) : undefined,
+    action: String(r.action ?? ""),
+    target: [r.target_type, r.target_id].filter(Boolean).map(String).join(" · "),
+    meta: (r.meta as Record<string, unknown>) ?? {},
+    time: createdAt ? relativeTime(createdAt) : "",
+    createdAt,
+  };
+}
+
+/**
+ * Admin audit trail, newest first, paginated. Admin-only under RLS (0016).
+ * Empty means empty (no activity yet) — mock is used only in demo mode or on a
+ * hard query error, so a real, quiet log doesn't show fabricated rows.
+ */
+export async function getAuditLog(offset = 0, limit = AUDIT_PAGE_SIZE): Promise<AuditPage> {
+  const demo = (): AuditPage => ({
+    entries: mock.auditLog.slice(offset, offset + limit),
+    total: mock.auditLog.length,
+  });
+  if (!isSupabaseConfigured) return demo();
+  try {
+    const sb = await createServerSupabase();
+    const { data, error, count } = await sb
+      .from("audit_log")
+      .select("*, actor:profiles(full_name, role)", { count: "exact" })
+      .order("created_at", { ascending: false })
+      .range(offset, offset + limit - 1);
+    if (error) return demo();
+    return { entries: (data ?? []).map(mapAuditEntry), total: count ?? 0 };
+  } catch {
+    return demo();
   }
 }
 

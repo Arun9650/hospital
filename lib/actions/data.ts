@@ -5,7 +5,7 @@ import { isSupabaseConfigured } from "@/lib/supabase/config";
 import { firstError, maxLen, oneOf, required } from "@/lib/validate";
 import { shortTime } from "@/lib/time";
 import { sendPushToUser } from "@/lib/push/send";
-import { searchDoctors, DOCTOR_PAGE_SIZE, type DoctorQuery, type DoctorPage } from "@/lib/db";
+import { searchDoctors, DOCTOR_PAGE_SIZE, getAuditLog, type DoctorQuery, type DoctorPage, type AuditPage } from "@/lib/db";
 import { logAudit } from "@/lib/audit";
 import type { Prescription } from "@/lib/data";
 
@@ -585,6 +585,13 @@ export async function searchDoctorsAction(query: DoctorQuery): Promise<DoctorPag
     limit: Math.max(1, Math.min(24, Math.floor(query.limit ?? DOCTOR_PAGE_SIZE))),
   };
   return searchDoctors(clean);
+}
+
+/* Admin audit-log pagination for the viewer's "Load more". Reads are gated to
+   admins by RLS (0016); a non-admin caller just gets an empty page. */
+export async function loadAuditLog(offset: number): Promise<AuditPage> {
+  const safe = typeof offset === "number" ? Math.max(0, Math.min(100000, Math.floor(offset))) : 0;
+  return getAuditLog(safe);
 }
 
 /* Doctor saves weekly availability (upsert per day). */

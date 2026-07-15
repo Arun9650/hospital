@@ -61,6 +61,7 @@ export const adminNav: NavItem[] = [
   { href: "/admin/appointments", label: "Appointments", icon: <I d={icons.calendar} /> },
   { href: "/admin/revenue", label: "Revenue", icon: <I d={icons.chart} /> },
   { href: "/admin/verification", label: "Verification", icon: <I d={icons.shield} /> },
+  { href: "/admin/audit", label: "Audit log", icon: <I d={icons.clock} /> },
   { href: "/admin/reports", label: "Reports", icon: <I d={icons.file} /> },
   { href: "/admin/content", label: "Content", icon: <I d={icons.content} /> },
   { href: "/admin/notifications", label: "Notifications", icon: <I d={icons.bell} /> },
