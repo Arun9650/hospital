@@ -264,6 +264,88 @@ export async function getFeaturedDoctors(): Promise<Doctor[]> {
   return (await getDoctors()).slice(0, 4);
 }
 
+export type DoctorQuery = {
+  q?: string;
+  specialties?: string[];
+  modes?: string[];
+  maxFee?: number;
+  minRating?: number;
+  sort?: string;
+  offset?: number;
+  limit?: number;
+};
+export type DoctorPage = { doctors: Doctor[]; total: number };
+
+export const DOCTOR_PAGE_SIZE = 9;
+
+function sortDoctors(list: Doctor[], sort?: string): Doctor[] {
+  const out = [...list];
+  if (sort === "Lowest price") out.sort((a, b) => a.fee - b.fee);
+  else if (sort === "Most experienced") out.sort((a, b) => b.experience - a.experience);
+  else if (sort === "Soonest available") out.sort((a, b) => a.nextSlot.localeCompare(b.nextSlot));
+  else out.sort((a, b) => b.rating - a.rating);
+  return out;
+}
+
+// In-memory filter mirroring the SQL query below — used in mock mode and as the
+// hard-error fallback so both paths return identical results.
+function filterDoctorsInMemory(all: Doctor[], query: DoctorQuery): DoctorPage {
+  const q = (query.q ?? "").trim().toLowerCase();
+  const filtered = all.filter((d) => {
+    const matchesQuery =
+      !q ||
+      d.name.toLowerCase().includes(q) ||
+      d.specialty.toLowerCase().includes(q) ||
+      d.tags.some((t) => t.toLowerCase().includes(q));
+    const matchesSpec = !query.specialties?.length || query.specialties.includes(d.specialty);
+    const matchesMode = !query.modes?.length || query.modes.some((m) => d.modes.includes(m as never));
+    const matchesFee = query.maxFee == null || d.fee <= query.maxFee;
+    const matchesRating = !query.minRating || d.rating >= query.minRating;
+    return matchesQuery && matchesSpec && matchesMode && matchesFee && matchesRating;
+  });
+  const sorted = sortDoctors(filtered, query.sort);
+  const offset = query.offset ?? 0;
+  const limit = query.limit ?? DOCTOR_PAGE_SIZE;
+  return { doctors: sorted.slice(offset, offset + limit), total: sorted.length };
+}
+
+/**
+ * Server-side, paginated doctor search. Unlike getDoctors (which mock-falls-back
+ * on empty), an empty *match set* is respected — "no doctors match" is a valid
+ * result — and we only fall back to the mock catalog on a hard query error, so
+ * the demo still works if the doctors table is unreachable.
+ */
+export async function searchDoctors(query: DoctorQuery): Promise<DoctorPage> {
+  if (!isSupabaseConfigured) return filterDoctorsInMemory(mock.doctors, query);
+  const offset = query.offset ?? 0;
+  const limit = query.limit ?? DOCTOR_PAGE_SIZE;
+  try {
+    const sb = createPublicClient();
+    let sel = sb.from("doctors").select("*", { count: "exact" });
+
+    // Sanitize before interpolating into the PostgREST .or() string: strip the
+    // characters that are significant to its filter grammar (and ilike wildcards)
+    // so a crafted query can't inject extra filters (§5.2 .or()-injection audit).
+    const safeQ = (query.q ?? "").replace(/[,()%*\\:]/g, " ").trim();
+    if (safeQ) sel = sel.or(`name.ilike.%${safeQ}%,specialty.ilike.%${safeQ}%`);
+    if (query.specialties?.length) sel = sel.in("specialty", query.specialties);
+    if (query.modes?.length) sel = sel.overlaps("modes", query.modes);
+    if (query.maxFee != null) sel = sel.lte("fee", query.maxFee);
+    if (query.minRating) sel = sel.gte("rating", query.minRating);
+
+    if (query.sort === "Lowest price") sel = sel.order("fee", { ascending: true });
+    else if (query.sort === "Most experienced") sel = sel.order("experience", { ascending: false });
+    else if (query.sort === "Soonest available") sel = sel.order("next_slot", { ascending: true });
+    else sel = sel.order("rating", { ascending: false });
+
+    const { data, error, count } = await sel.range(offset, offset + limit - 1);
+    if (error) return filterDoctorsInMemory(mock.doctors, query);
+    return { doctors: (data ?? []).map(mapDoctor), total: count ?? 0 };
+  } catch {
+    return filterDoctorsInMemory(mock.doctors, query);
+  }
+}
+
 export async function getDoctor(id: string): Promise<Doctor | undefined> {
   if (!isSupabaseConfigured) return mock.getDoctor(id);
   try {

@@ -1,57 +1,87 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
 import { PageHeader } from "@/components/DashboardShell";
 import { DoctorCard } from "@/components/DoctorCard";
 import { Pills } from "@/components/Tabs";
+import { Button } from "@/components/ui";
+import { searchDoctorsAction } from "@/lib/actions/data";
 import type { Doctor, Specialty } from "@/lib/data";
 
 const modeOptions = ["Video", "Audio", "Chat", "In-person"];
 const sortOptions = ["Top rated", "Lowest price", "Most experienced", "Soonest available"];
+const PAGE = 9;
 
 export function DoctorSearchClient({
-  doctors,
   specialties,
+  initialDoctors,
+  initialTotal,
+  initialQuery,
+  initialSpecialty,
 }: {
-  doctors: Doctor[];
   specialties: Specialty[];
+  initialDoctors: Doctor[];
+  initialTotal: number;
+  initialQuery: string;
+  initialSpecialty: string;
 }) {
-  const params = useSearchParams();
-  const initialSpecialty = params.get("specialty") ?? "";
-  const initialQuery = params.get("q") ?? "";
-
   const [query, setQuery] = useState(initialQuery);
-  const [spec, setSpec] = useState<string[]>(
-    initialSpecialty ? [specialties.find((s) => s.slug === initialSpecialty)?.name ?? ""] : []
-  );
+  const [spec, setSpec] = useState<string[]>(initialSpecialty ? [initialSpecialty] : []);
   const [modes, setModes] = useState<string[]>([]);
   const [maxFee, setMaxFee] = useState(80);
   const [minRating, setMinRating] = useState(0);
   const [sort, setSort] = useState("Top rated");
 
-  const results = useMemo(() => {
-    let list = doctors.filter((d) => {
-      const q = query.toLowerCase();
-      const matchesQuery =
-        !q ||
-        d.name.toLowerCase().includes(q) ||
-        d.specialty.toLowerCase().includes(q) ||
-        d.tags.some((t) => t.toLowerCase().includes(q));
-      const matchesSpec = spec.length === 0 || spec.includes(d.specialty);
-      const matchesMode = modes.length === 0 || modes.some((m) => d.modes.includes(m as never));
-      const matchesFee = d.fee <= maxFee;
-      const matchesRating = d.rating >= minRating;
-      return matchesQuery && matchesSpec && matchesMode && matchesFee && matchesRating;
-    });
-    list = [...list].sort((a, b) => {
-      if (sort === "Lowest price") return a.fee - b.fee;
-      if (sort === "Most experienced") return b.experience - a.experience;
-      if (sort === "Soonest available") return a.nextSlot.localeCompare(b.nextSlot);
-      return b.rating - a.rating;
-    });
-    return list;
-  }, [doctors, query, spec, modes, maxFee, minRating, sort]);
+  const [results, setResults] = useState<Doctor[]>(initialDoctors);
+  const [total, setTotal] = useState(initialTotal);
+  const [loading, setLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+
+  // Monotonic id so a slow/stale response can't overwrite a newer query's result.
+  const reqId = useRef(0);
+  const firstRun = useRef(true);
+
+  function filters() {
+    return {
+      q: query.trim() || undefined,
+      specialties: spec.length ? spec : undefined,
+      modes: modes.length ? modes : undefined,
+      maxFee,
+      minRating: minRating || undefined,
+      sort,
+      limit: PAGE,
+    };
+  }
+
+  // Refetch page 0 whenever a filter changes (debounced). SSR already rendered
+  // the initial state, so the very first run is skipped.
+  useEffect(() => {
+    if (firstRun.current) {
+      firstRun.current = false;
+      return;
+    }
+    const id = ++reqId.current;
+    setLoading(true);
+    const t = setTimeout(async () => {
+      const page = await searchDoctorsAction({ ...filters(), offset: 0 });
+      if (id !== reqId.current) return; // a newer query superseded this one
+      setResults(page.doctors);
+      setTotal(page.total);
+      setLoading(false);
+    }, 300);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query, spec, modes, maxFee, minRating, sort]);
+
+  async function loadMore() {
+    const id = reqId.current;
+    setLoadingMore(true);
+    const page = await searchDoctorsAction({ ...filters(), offset: results.length });
+    setLoadingMore(false);
+    if (id !== reqId.current) return; // filters changed mid-load — discard
+    setResults((prev) => [...prev, ...page.doctors]);
+    setTotal(page.total);
+  }
 
   function reset() {
     setQuery("");
@@ -65,7 +95,7 @@ export function DoctorSearchClient({
     <>
       <PageHeader
         title="Find a doctor"
-        subtitle={`${results.length} verified specialists ready to help`}
+        subtitle={`${total} verified specialist${total === 1 ? "" : "s"} ready to help`}
       />
 
       {/* Search bar */}
@@ -143,7 +173,9 @@ export function DoctorSearchClient({
         {/* Results */}
         <div>
           <div className="mb-4 flex items-center justify-between">
-            <p className="text-sm text-mute">{results.length} doctors</p>
+            <p className="text-sm text-mute">
+              {loading ? "Searching…" : `${total} doctor${total === 1 ? "" : "s"}`}
+            </p>
             <label className="flex items-center gap-2 text-sm">
               <span className="text-mute">Sort:</span>
               <select
@@ -158,7 +190,7 @@ export function DoctorSearchClient({
             </label>
           </div>
 
-          {results.length === 0 ? (
+          {results.length === 0 && !loading ? (
             <div className="card-flat p-12 text-center">
               <p className="text-3xl">🔍</p>
               <p className="mt-3 font-display text-xl font-light">No doctors match your filters</p>
@@ -167,11 +199,21 @@ export function DoctorSearchClient({
               </button>
             </div>
           ) : (
-            <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
-              {results.map((d) => (
-                <DoctorCard key={d.id} doctor={d} />
-              ))}
-            </div>
+            <>
+              <div className={`grid gap-5 sm:grid-cols-2 xl:grid-cols-3 ${loading ? "opacity-60" : ""}`}>
+                {results.map((d) => (
+                  <DoctorCard key={d.id} doctor={d} />
+                ))}
+              </div>
+
+              {results.length < total && (
+                <div className="mt-8 text-center">
+                  <Button variant="light" onClick={loadMore} loading={loadingMore} disabled={loadingMore}>
+                    Load more
+                  </Button>
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>

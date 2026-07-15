@@ -5,6 +5,7 @@ import { isSupabaseConfigured } from "@/lib/supabase/config";
 import { firstError, maxLen, oneOf, required } from "@/lib/validate";
 import { shortTime } from "@/lib/time";
 import { sendPushToUser } from "@/lib/push/send";
+import { searchDoctors, DOCTOR_PAGE_SIZE, type DoctorQuery, type DoctorPage } from "@/lib/db";
 import type { Prescription } from "@/lib/data";
 
 type Result = { ok: boolean };
@@ -555,6 +556,25 @@ export async function issuePrescriptionForAppointment(
     console.error("[prescription] unexpected error", err);
     return { ok: false };
   }
+}
+
+/* Server-side doctor search for the patient discovery page. Clamps every field
+   of the untrusted client query at the trust boundary before it reaches the DB
+   (query length, page size, numeric ranges), then delegates to the read layer. */
+export async function searchDoctorsAction(query: DoctorQuery): Promise<DoctorPage> {
+  const clean: DoctorQuery = {
+    q: typeof query.q === "string" ? query.q.slice(0, 100) : undefined,
+    specialties: Array.isArray(query.specialties)
+      ? query.specialties.slice(0, 20).map((s) => String(s).slice(0, 100))
+      : undefined,
+    modes: Array.isArray(query.modes) ? query.modes.slice(0, 8).map((m) => String(m).slice(0, 40)) : undefined,
+    maxFee: typeof query.maxFee === "number" ? Math.max(0, Math.min(100000, query.maxFee)) : undefined,
+    minRating: typeof query.minRating === "number" ? Math.max(0, Math.min(5, query.minRating)) : undefined,
+    sort: typeof query.sort === "string" ? query.sort.slice(0, 40) : undefined,
+    offset: typeof query.offset === "number" ? Math.max(0, Math.min(10000, Math.floor(query.offset))) : 0,
+    limit: Math.max(1, Math.min(24, Math.floor(query.limit ?? DOCTOR_PAGE_SIZE))),
+  };
+  return searchDoctors(clean);
 }
 
 /* Doctor saves weekly availability (upsert per day). */

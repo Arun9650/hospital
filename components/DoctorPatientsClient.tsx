@@ -139,16 +139,18 @@ function PatientDetail({
   const [target, setTarget] = useState<string | null>(null);
 
   // A treating doctor may read this patient's uploaded records (RLS 0015).
-  // Fetch on selection; null = loading. Live-mode only — mock has no patients.
-  const [records, setRecords] = useState<MedicalRecord[] | null>(null);
+  // Fetch on selection; keying the result to the patient id means `records` is
+  // null (loading) until the fetch for the *current* patient resolves — no
+  // synchronous reset needed. Live-mode only — mock has no patients.
+  const [loaded, setLoaded] = useState<{ id: string; records: MedicalRecord[] } | null>(null);
   useEffect(() => {
     let alive = true;
-    setRecords(null);
-    loadPatientRecords(patient.id).then((r) => alive && setRecords(r));
+    loadPatientRecords(patient.id).then((r) => alive && setLoaded({ id: patient.id, records: r }));
     return () => {
       alive = false;
     };
   }, [patient.id]);
+  const records = loaded?.id === patient.id ? loaded.records : null;
 
   function go(href: string, message: string) {
     setTarget(href);
