@@ -412,6 +412,29 @@ export async function getPrescriptions(userId?: string): Promise<Prescription[]>
   }
 }
 
+// The medical-records bucket is private (0011): mint short-lived signed URLs
+// per read from each stored file_path so View/Download work under RLS.
+async function withSignedRecordUrls(
+  sb: Awaited<ReturnType<typeof createServerSupabase>>,
+  rows: Row[]
+): Promise<MedicalRecord[]> {
+  const paths = rows.map((r) => r.file_path).filter(Boolean) as string[];
+  const signed = new Map<string, string>();
+  if (paths.length) {
+    const { data: urls } = await sb.storage
+      .from("medical-records")
+      .createSignedUrls(paths, 3600);
+    for (const u of urls ?? []) {
+      if (u.path && u.signedUrl) signed.set(u.path, u.signedUrl);
+    }
+  }
+  return rows.map((r) => {
+    const rec = mapRecord(r);
+    const path = r.file_path ? String(r.file_path) : "";
+    return { ...rec, url: path ? signed.get(path) : undefined };
+  });
+}
+
 export async function getMedicalRecords(userId?: string): Promise<MedicalRecord[]> {
   if (!isSupabaseConfigured) return mock.medicalRecords;
   try {
@@ -419,27 +442,28 @@ export async function getMedicalRecords(userId?: string): Promise<MedicalRecord[
     const filter = userId ? `patient_id.eq.${userId},patient_id.is.null` : `patient_id.is.null`;
     const { data, error } = await sb.from("medical_records").select("*").or(filter);
     if (error || !data?.length) return mock.medicalRecords;
-
-    // The medical-records bucket is private (0011): mint short-lived signed URLs
-    // per read from the stored file_path so View/Download work under RLS.
-    const rows = data as Row[];
-    const paths = rows.map((r) => r.file_path).filter(Boolean) as string[];
-    const signed = new Map<string, string>();
-    if (paths.length) {
-      const { data: urls } = await sb.storage
-        .from("medical-records")
-        .createSignedUrls(paths, 3600);
-      for (const u of urls ?? []) {
-        if (u.path && u.signedUrl) signed.set(u.path, u.signedUrl);
-      }
-    }
-    return rows.map((r) => {
-      const rec = mapRecord(r);
-      const path = r.file_path ? String(r.file_path) : "";
-      return { ...rec, url: path ? signed.get(path) : undefined };
-    });
+    return withSignedRecordUrls(sb, data as Row[]);
   } catch {
     return mock.medicalRecords;
+  }
+}
+
+// Doctor-side: a treating doctor reads ONE patient's uploaded records. RLS (0015)
+// gates this to their own patients. Unlike getMedicalRecords, empty means empty —
+// no mock fallback and no null-owner demo rows — so the doctor sees exactly what
+// that patient uploaded.
+export async function getPatientMedicalRecords(patientId: string): Promise<MedicalRecord[]> {
+  if (!isSupabaseConfigured || !patientId) return [];
+  try {
+    const sb = await createServerSupabase();
+    const { data, error } = await sb
+      .from("medical_records")
+      .select("*")
+      .eq("patient_id", patientId);
+    if (error || !data?.length) return [];
+    return withSignedRecordUrls(sb, data as Row[]);
+  } catch {
+    return [];
   }
 }
 

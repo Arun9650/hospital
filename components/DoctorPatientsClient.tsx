@@ -1,12 +1,21 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { PageHeader } from "@/components/DashboardShell";
 import { Avatar, Button, EmptyState } from "@/components/ui";
 import { Icon } from "@/components/Icon";
 import { useToast } from "@/components/Toast";
-import type { Patient } from "@/lib/data";
+import { loadPatientRecords } from "@/lib/actions/records";
+import type { MedicalRecord, Patient } from "@/lib/data";
+
+const recordTypeIcon: Record<string, string> = {
+  "Lab Report": "🧪",
+  Prescription: "📄",
+  Scan: "🩻",
+  "Discharge Summary": "🏥",
+  Vaccination: "💉",
+};
 
 export function DoctorPatientsClient({ patients }: { patients: Patient[] }) {
   const [query, setQuery] = useState("");
@@ -129,6 +138,18 @@ function PatientDetail({
   const [pending, startTransition] = useTransition();
   const [target, setTarget] = useState<string | null>(null);
 
+  // A treating doctor may read this patient's uploaded records (RLS 0015).
+  // Fetch on selection; null = loading. Live-mode only — mock has no patients.
+  const [records, setRecords] = useState<MedicalRecord[] | null>(null);
+  useEffect(() => {
+    let alive = true;
+    setRecords(null);
+    loadPatientRecords(patient.id).then((r) => alive && setRecords(r));
+    return () => {
+      alive = false;
+    };
+  }, [patient.id]);
+
   function go(href: string, message: string) {
     setTarget(href);
     show(message, "info");
@@ -185,6 +206,43 @@ function PatientDetail({
                   {h.date} · {h.by}
                 </p>
               </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <h3 className="mt-6 text-sm font-medium">Uploaded documents</h3>
+      {records === null ? (
+        <p className="mt-2 text-sm text-mute">Loading records…</p>
+      ) : records.length === 0 ? (
+        <p className="mt-2 text-sm text-mute">No documents uploaded.</p>
+      ) : (
+        <div className="mt-3 divide-y divide-[#f0f0f0]">
+          {records.map((r) => (
+            <div key={r.id} className="flex items-center justify-between gap-3 py-3">
+              <div className="flex min-w-0 items-center gap-3">
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-surface-card text-lg">
+                  {recordTypeIcon[r.type] ?? "📄"}
+                </span>
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium">{r.title}</p>
+                  <p className="truncate text-xs text-mute">
+                    {r.type} · {r.date} · {r.size}
+                  </p>
+                </div>
+              </div>
+              {r.url ? (
+                <a
+                  href={r.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="btn btn-light btn-sm shrink-0"
+                >
+                  View
+                </a>
+              ) : (
+                <span className="shrink-0 text-xs text-mute">Demo file</span>
+              )}
             </div>
           ))}
         </div>

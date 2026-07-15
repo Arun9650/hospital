@@ -3,6 +3,8 @@
 import { createServerSupabase } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
 import { firstError, maxLen, oneOf } from "@/lib/validate";
+import { getPatientMedicalRecords } from "@/lib/db";
+import type { MedicalRecord } from "@/lib/data";
 
 const RECORD_TYPES = [
   "Lab Report",
@@ -20,6 +22,13 @@ function formatBytes(n: number): string {
   const kb = n / 1024;
   if (kb < 1024) return `${kb.toFixed(kb < 10 ? 1 : 0)} KB`;
   return `${(kb / 1024).toFixed(1)} MB`;
+}
+
+/* Doctor loads a patient's uploaded records for the patient-record detail pane.
+   RLS (0015) scopes this to the doctor's own patients — a non-treating caller
+   just gets an empty list. */
+export async function loadPatientRecords(patientId: string): Promise<MedicalRecord[]> {
+  return getPatientMedicalRecords(patientId);
 }
 
 /* Patient uploads a medical record file → Supabase Storage + a medical_records
