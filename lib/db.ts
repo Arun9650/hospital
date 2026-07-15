@@ -547,7 +547,9 @@ export async function getChatThreads(
 export async function getVerificationQueue() {
   if (!isSupabaseConfigured) return mock.verificationQueue;
   try {
-    const sb = createPublicClient();
+    // Auth-aware client: verification_queue is admin-only under RLS (0014), so
+    // the anon public client would read 0 rows and fall through to mock.
+    const sb = await createServerSupabase();
     const { data, error } = await sb.from("verification_queue").select("*");
     if (error || !data?.length) return mock.verificationQueue;
     return data.map((r: Row) => ({
