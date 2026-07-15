@@ -7,7 +7,7 @@ import { shortTime } from "@/lib/time";
 import { sendPushToUser } from "@/lib/push/send";
 import { searchDoctors, DOCTOR_PAGE_SIZE, getAuditLog, type DoctorQuery, type DoctorPage, type AuditPage } from "@/lib/db";
 import { logAudit } from "@/lib/audit";
-import type { Prescription } from "@/lib/data";
+import type { ChatMessage, Prescription } from "@/lib/data";
 
 type Result = { ok: boolean };
 
@@ -238,7 +238,7 @@ export async function sendChatMessage(input: {
   threadId: string;
   sender: "patient" | "doctor";
   body: string;
-}): Promise<{ ok: boolean; id?: string; time?: string }> {
+}): Promise<{ ok: boolean; id?: string; time?: string; createdAt?: string }> {
   const body = input.body.trim();
   // Trust boundary: non-empty, length-capped, known sender — before any DB write.
   if (firstError(required(body, "Message"), maxLen(body, 4000, "Message"), oneOf(input.sender, ["patient", "doctor"] as const, "Sender"))) {
@@ -258,7 +258,12 @@ export async function sendChatMessage(input: {
       .update({ updated_at: new Date().toISOString() })
       .eq("id", input.threadId);
     await logAudit(sb, "chat.message", "chat_thread", input.threadId, { sender: input.sender });
-    return { ok: true, id: String(data.id), time: shortTime(data.created_at) };
+    return {
+      ok: true,
+      id: String(data.id),
+      time: shortTime(data.created_at),
+      createdAt: String(data.created_at ?? ""),
+    };
   } catch {
     return { ok: false };
   }
@@ -302,6 +307,61 @@ export async function getOrCreatePatientThread(
     return { ok: true, threadId: String(data.id) };
   } catch {
     return { ok: false };
+  }
+}
+
+/* Mark the other party's messages in a thread as read (read receipts). RLS
+   scopes the update to threads the caller participates in. No-op in mock. */
+export async function markThreadRead(
+  threadId: string,
+  readerSide: "patient" | "doctor"
+): Promise<Result> {
+  if (!threadId) return { ok: false };
+  if (!isSupabaseConfigured) return { ok: true };
+  try {
+    const sb = await createServerSupabase();
+    const otherSide = readerSide === "patient" ? "doctor" : "patient";
+    await sb
+      .from("chat_messages")
+      .update({ read_at: new Date().toISOString() })
+      .eq("thread_id", threadId)
+      .eq("sender", otherSide)
+      .is("read_at", null);
+    return { ok: true };
+  } catch {
+    return { ok: false };
+  }
+}
+
+/* Fetch the page of messages older than `before` (ISO) for infinite-scroll-up.
+   Returns ascending. Empty in mock mode (mock threads aren't paginated). */
+export async function loadOlderChatMessages(
+  threadId: string,
+  before: string,
+  limit = 50
+): Promise<ChatMessage[]> {
+  if (!threadId || !before || !isSupabaseConfigured) return [];
+  try {
+    const sb = await createServerSupabase();
+    const { data } = await sb
+      .from("chat_messages")
+      .select("id, sender, body, created_at, read_at")
+      .eq("thread_id", threadId)
+      .lt("created_at", before)
+      .order("created_at", { ascending: false })
+      .limit(limit);
+    return ((data ?? []) as Array<Record<string, unknown>>)
+      .reverse()
+      .map((m) => ({
+        id: String(m.id),
+        from: (m.sender as "patient" | "doctor") ?? "doctor",
+        text: String(m.body ?? ""),
+        time: shortTime(m.created_at as string),
+        createdAt: String(m.created_at ?? ""),
+        readAt: m.read_at ? String(m.read_at) : null,
+      }));
+  } catch {
+    return [];
   }
 }
 

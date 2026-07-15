@@ -820,6 +820,8 @@ export type ChatMessage = {
   from: "patient" | "doctor";
   text: string;
   time: string; // short label, e.g. "9:02 AM"
+  createdAt?: string; // ISO timestamp, used as the pagination cursor (live mode)
+  readAt?: string | null; // when the recipient read it (read receipts)
 };
 
 export type ChatThread = {
@@ -836,6 +838,7 @@ export type ChatThread = {
   lastActive: string; // e.g. "2m ago"
   unread: number;
   messages: ChatMessage[];
+  hasMoreMessages?: boolean; // older messages exist beyond the loaded window
 };
 
 /* The signed-in patient (mirrors PatientShell). */

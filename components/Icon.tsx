@@ -20,6 +20,7 @@ export type IconName =
   | "hospital"
   | "close"
   | "check"
+  | "check-double"
   | "calendar"
   | "clock"
   | "star"
@@ -46,6 +47,7 @@ const paths: Record<IconName, string> = {
     "M4 21V5a2 2 0 012-2h12a2 2 0 012 2v16M2 21h20M12 7v6M9 10h6",
   close: "M18 6L6 18M6 6l12 12",
   check: "M20 6L9 17l-5-5",
+  "check-double": "M2 13l4 4L14 7M10 13l4 4L22 7",
   calendar: "M7 3v4M17 3v4M3 9h18M5 5h14a2 2 0 012 2v12a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2z",
   clock: "M12 21a9 9 0 100-18 9 9 0 000 18zM12 7v5l3 2",
   star: "M12 2l3.1 6.3 6.9 1-5 4.9 1.2 6.8L12 17.8 5.8 21l1.2-6.8-5-4.9 6.9-1z",

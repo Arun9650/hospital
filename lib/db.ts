@@ -195,6 +195,8 @@ function mapNotification(r: Row): NotificationItem {
 // server imports (`@/lib/db`) keep working.
 export { relativeTime, shortTime };
 
+export const CHAT_PAGE_SIZE = 50;
+
 function mapChatThread(t: Row, msgs: Row[], perspective: "patient" | "doctor"): ChatThread {
   const doc = (t.doctor as Row) ?? {};
   const messages: ChatMessage[] = msgs.map((m) => ({
@@ -202,6 +204,8 @@ function mapChatThread(t: Row, msgs: Row[], perspective: "patient" | "doctor"): 
     from: (m.sender as "patient" | "doctor") ?? "doctor",
     text: String(m.body ?? ""),
     time: shortTime(m.created_at),
+    createdAt: String(m.created_at ?? ""),
+    readAt: m.read_at ? String(m.read_at) : null,
   }));
   // Unread = trailing run of messages from the other party.
   const otherSide = perspective === "patient" ? "doctor" : "patient";
@@ -222,6 +226,8 @@ function mapChatThread(t: Row, msgs: Row[], perspective: "patient" | "doctor"): 
     lastActive: relativeTime(lastTs),
     unread,
     messages,
+    // A full page loaded means older messages likely exist (§5.3 pagination).
+    hasMoreMessages: msgs.length >= CHAT_PAGE_SIZE,
   };
 }
 
@@ -631,18 +637,22 @@ export async function getChatThreads(
     const { data: threads, error } = await q.order("updated_at", { ascending: false });
     if (error || !threads?.length) return fallback;
 
+    // Load only the most-recent page per thread (one round trip via window RPC)
+    // so a long history doesn't load in full; older messages page in on demand.
     const ids = threads.map((t) => t.id);
-    const { data: msgs } = await sb
-      .from("chat_messages")
-      .select("*")
-      .in("thread_id", ids)
-      .order("created_at", { ascending: true });
+    const { data: msgs } = await sb.rpc("recent_chat_messages", {
+      p_thread_ids: ids,
+      p_limit: CHAT_PAGE_SIZE,
+    });
 
     const byThread = new Map<string, Row[]>();
     for (const m of (msgs as Row[]) ?? []) {
       const key = String(m.thread_id);
       (byThread.get(key) ?? byThread.set(key, []).get(key)!).push(m);
     }
+    // The RPC returns newest-first; mapChatThread expects ascending order.
+    for (const list of byThread.values())
+      list.sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)));
     return (threads as Row[]).map((t) =>
       mapChatThread(t, byThread.get(String(t.id)) ?? [], perspective)
     );

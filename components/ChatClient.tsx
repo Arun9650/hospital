@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { RealtimeChannel, SupabaseClient } from "@supabase/supabase-js";
 import { Avatar } from "@/components/ui";
 import { Icon } from "@/components/Icon";
-import { sendChatMessage } from "@/lib/actions/data";
+import { loadOlderChatMessages, markThreadRead, sendChatMessage } from "@/lib/actions/data";
 import { currentPatient, getDoctor } from "@/lib/data";
 import type { ChatMessage, ChatThread } from "@/lib/data";
 
@@ -91,10 +91,15 @@ export function ChatClient({
   const [query, setQuery] = useState("");
   // Which threads currently show a "typing…" indicator for the OTHER party.
   const [typing, setTyping] = useState<Record<string, boolean>>({});
+  const [loadingOlder, setLoadingOlder] = useState(false);
   const channelRef = useRef<RealtimeChannel | null>(null);
   const typingTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const lastTypingSent = useRef(0);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+  // When set, the next scroll effect restores position after prepending older
+  // messages (instead of jumping to the bottom).
+  const pendingPrepend = useRef<{ prevHeight: number } | null>(null);
 
   const ownSide: "patient" | "doctor" = perspective;
 
@@ -127,6 +132,35 @@ export function ChatClient({
       event: "typing",
       payload: { threadId, sender: ownSide },
     });
+  }
+
+  // Persist that we've read the other party's messages in a thread, and tell
+  // the other client so it can flip its sent messages to "read" ticks live.
+  function markRead(threadId: string) {
+    if (!configured) return;
+    markThreadRead(threadId, ownSide);
+    channelRef.current?.send({
+      type: "broadcast",
+      event: "read",
+      payload: { threadId, reader: ownSide },
+    });
+  }
+
+  // The other party read our messages → stamp our sent messages in that thread.
+  function applyRead(threadId: string) {
+    const now = new Date().toISOString();
+    setThreads((ts) =>
+      ts.map((t) =>
+        t.id !== threadId
+          ? t
+          : {
+              ...t,
+              messages: t.messages.map((m) =>
+                m.from === ownSide && !m.readAt ? { ...m, readAt: now } : m
+              ),
+            }
+      )
+    );
   }
 
   useEffect(() => () => {
@@ -176,6 +210,11 @@ export function ChatClient({
           if (p.sender === ownSide) return; // ignore our own echo
           showTyping(p.threadId);
         })
+        .on("broadcast", { event: "read" }, ({ payload }) => {
+          const p = payload as { threadId: string; reader: Perspective };
+          if (p.reader === ownSide) return; // our own read — nothing to update
+          applyRead(p.threadId); // they read our messages
+        })
         .on(
           "postgres_changes",
           { event: "INSERT", schema: "public", table: "chat_messages" },
@@ -198,7 +237,14 @@ export function ChatClient({
                   ...t,
                   messages: [
                     ...t.messages,
-                    { id: row.id, from: row.sender, text: row.body, time: clockLabel(row.created_at) },
+                    {
+                      id: row.id,
+                      from: row.sender,
+                      text: row.body,
+                      time: clockLabel(row.created_at),
+                      createdAt: row.created_at,
+                      readAt: null,
+                    },
                   ],
                   lastActive: "just now",
                   unread: isMine || isOpen ? t.unread : t.unread + 1,
@@ -207,6 +253,8 @@ export function ChatClient({
             });
             if (row.sender !== ownSide) {
               setTyping((t) => ({ ...t, [row.thread_id]: false }));
+              // If their message landed in the thread we're viewing, it's read now.
+              if (activeIdRef.current === row.thread_id) markRead(row.thread_id);
             }
           }
         )
@@ -219,11 +267,21 @@ export function ChatClient({
       channelRef.current = null;
       if (sb && channel) sb.removeChannel(channel);
     };
+    // markRead/applyRead read refs + stable setters; re-subscribing per render
+    // would tear down the channel needlessly.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [configured, ownSide]);
 
   // Auto-scroll the conversation to the newest message on send/receive and when
-  // switching threads — the composer should always show the latest bubble.
+  // switching threads. After prepending older messages, restore the prior
+  // position instead so the view stays put.
   useEffect(() => {
+    const el = listRef.current;
+    if (pendingPrepend.current && el) {
+      el.scrollTop = el.scrollHeight - pendingPrepend.current.prevHeight;
+      pendingPrepend.current = null;
+      return;
+    }
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [activeId, active?.messages.length]);
 
@@ -247,6 +305,40 @@ export function ChatClient({
     setActiveId(id);
     setMobileThreadOpen(true);
     setThreads((ts) => ts.map((t) => (t.id === id ? { ...t, unread: 0 } : t)));
+    markRead(id);
+  }
+
+  // Mark the initially-open thread read once (e.g. arriving via ?doctor=…).
+  useEffect(() => {
+    if (activeId) markRead(activeId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Load the previous page of messages for the active thread (infinite scroll-up
+  // via a button). Preserves scroll position so the view doesn't jump.
+  async function loadOlder() {
+    if (!configured || !active || loadingOlder) return;
+    const oldest = active.messages[0];
+    if (!oldest?.createdAt) return;
+    setLoadingOlder(true);
+    const older = await loadOlderChatMessages(active.id, oldest.createdAt);
+    const known = new Set(active.messages.map((m) => m.id));
+    const fresh = older.filter((m) => !known.has(m.id));
+    // Only arm scroll-restore when we actually prepend (so the effect fires).
+    if (fresh.length && listRef.current)
+      pendingPrepend.current = { prevHeight: listRef.current.scrollHeight };
+    setThreads((ts) =>
+      ts.map((t) =>
+        t.id !== active.id
+          ? t
+          : {
+              ...t,
+              messages: [...fresh, ...t.messages],
+              hasMoreMessages: older.length >= 50,
+            }
+      )
+    );
+    setLoadingOlder(false);
   }
 
   function appendMessage(threadId: string, msg: ChatMessage) {
@@ -270,7 +362,14 @@ export function ChatClient({
       // Persist to Supabase; the realtime echo (deduped by id) confirms it.
       const res = await sendChatMessage({ threadId, sender: ownSide, body: text });
       if (res.ok && res.id) {
-        appendMessage(threadId, { id: res.id, from: ownSide, text, time: res.time || clockLabel() });
+        appendMessage(threadId, {
+          id: res.id,
+          from: ownSide,
+          text,
+          time: res.time || clockLabel(),
+          createdAt: res.createdAt || new Date().toISOString(),
+          readAt: null,
+        });
       }
       return;
     }
@@ -384,7 +483,19 @@ export function ChatClient({
           </div>
 
           {/* Messages */}
-          <div className="min-h-0 flex-1 space-y-3 overflow-y-auto bg-surface-soft p-4">
+          <div ref={listRef} className="min-h-0 flex-1 space-y-3 overflow-y-auto bg-surface-soft p-4">
+            {active.hasMoreMessages && (
+              <div className="flex justify-center pb-1">
+                <button
+                  type="button"
+                  onClick={loadOlder}
+                  disabled={loadingOlder}
+                  className="chip disabled:opacity-50"
+                >
+                  {loadingOlder ? "Loading…" : "Load earlier messages"}
+                </button>
+              </div>
+            )}
             {active.messages.map((m) => {
               const mine = m.from === ownSide;
               return (
@@ -399,8 +510,20 @@ export function ChatClient({
                     >
                       {m.text}
                     </div>
-                    <p className={`mt-1 text-[11px] text-mute ${mine ? "text-right" : ""}`}>
+                    <p
+                      className={`mt-1 flex items-center gap-1 text-[11px] text-mute ${
+                        mine ? "justify-end" : ""
+                      }`}
+                    >
                       {m.time}
+                      {mine && configured && (
+                        <Icon
+                          name={m.readAt ? "check-double" : "check"}
+                          size={13}
+                          className={m.readAt ? "text-ps" : "text-mute"}
+                          aria-label={m.readAt ? "Read" : "Sent"}
+                        />
+                      )}
                     </p>
                   </div>
                 </div>
