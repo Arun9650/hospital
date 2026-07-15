@@ -6,6 +6,7 @@ import { firstError, maxLen, oneOf, required } from "@/lib/validate";
 import { shortTime } from "@/lib/time";
 import { sendPushToUser } from "@/lib/push/send";
 import { searchDoctors, DOCTOR_PAGE_SIZE, type DoctorQuery, type DoctorPage } from "@/lib/db";
+import { logAudit } from "@/lib/audit";
 import type { Prescription } from "@/lib/data";
 
 type Result = { ok: boolean };
@@ -327,6 +328,7 @@ export async function updateAppointmentStatus(
         url: "/patient/notifications",
       });
     }
+    await logAudit(sb, "appointment.status_change", "appointment", id, { status });
     return { ok: true };
   } catch {
     return { ok: false };
@@ -464,6 +466,10 @@ export async function issuePrescription(input: {
         url: "/patient/prescriptions",
       });
     }
+    await logAudit(sb, "prescription.issue", "prescription", null, {
+      patientId: input.patientId ?? null,
+      diagnosis: input.diagnosis,
+    });
     return { ok: true };
   } catch {
     return { ok: false };
@@ -537,6 +543,10 @@ export async function issuePrescriptionForAppointment(
         url: "/patient/prescriptions",
       });
     }
+    await logAudit(sb, "prescription.issue", "prescription", String(row?.id ?? ""), {
+      appointmentId,
+      patientId: (appt.patient_id as string) ?? null,
+    });
     // Hand the saved prescription back so the caller (the in-call pad) can drop a
     // downloadable copy straight into the consultation chat.
     return {
@@ -621,6 +631,7 @@ export async function decideVerification(
   try {
     const sb = await createServerSupabase();
     await sb.from("verification_queue").update({ status }).eq("id", id);
+    await logAudit(sb, "verification.decide", "verification", id, { status });
     return { ok: true };
   } catch {
     return { ok: false };

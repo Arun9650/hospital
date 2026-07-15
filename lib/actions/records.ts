@@ -4,6 +4,7 @@ import { createServerSupabase } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
 import { firstError, maxLen, oneOf } from "@/lib/validate";
 import { getPatientMedicalRecords } from "@/lib/db";
+import { logAudit } from "@/lib/audit";
 import type { MedicalRecord } from "@/lib/data";
 
 const RECORD_TYPES = [
@@ -94,6 +95,7 @@ export async function uploadMedicalRecord(
       console.error("[records] insert failed", { message: insErr.message, code: insErr.code });
       return { ok: false, error: "Couldn't save the record. Please try again." };
     }
+    await logAudit(sb, "record.upload", "medical_record", null, { title: title || file.name, type });
     return { ok: true };
   } catch (err) {
     console.error("[records] unexpected error", err);
