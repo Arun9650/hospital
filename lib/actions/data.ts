@@ -27,14 +27,15 @@ async function notify(
     url?: string;
   }
 ) {
-  await sb.from("notifications").insert({
-    id: crypto.randomUUID(),
-    user_id: n.userId ?? null,
-    title: n.title,
-    body: n.body,
-    time_label: "Just now",
-    kind: n.kind,
-    unread: true,
+  // Inserts go through the security-definer create_notification RPC (0013): the
+  // notifications table INSERT policy is locked, and the RPC authorizes the
+  // caller↔target relationship so a doctor can notify their patient (and vice
+  // versa) without letting anyone spoof notifications to arbitrary users.
+  await sb.rpc("create_notification", {
+    p_user_id: n.userId ?? null,
+    p_title: n.title,
+    p_body: n.body,
+    p_kind: n.kind,
   });
 
   if (n.userId) {
