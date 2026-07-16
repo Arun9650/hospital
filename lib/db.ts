@@ -6,6 +6,7 @@
    placeholder keys and makes a misconfiguration non-fatal.
    ---------------------------------------------------------------------- */
 
+import { unstable_cache } from "next/cache";
 import { isSupabaseConfigured } from "./supabase/config";
 import { createPublicClient } from "./supabase/public";
 import { createServerSupabase } from "./supabase/server";
@@ -272,25 +273,52 @@ function mapSpecialty(r: Row): Specialty {
 
 /* ---- Reads ------------------------------------------------------------ */
 
+/* Catalog reads (doctors, specialties, reviews) are public, cookie-free and
+   rarely change, yet were re-queried on every page load. Cache them across
+   requests with a short revalidate so browsing is near-instant and the DB isn't
+   hit per navigation. Per-user reads (appointments, records, notifications) stay
+   dynamic. ponytail: time-based revalidation only — a doctor/review edit shows
+   within CATALOG_TTL; add revalidateTag("doctors"/"reviews") on those writes if
+   instant propagation is ever needed. */
+const CATALOG_TTL = 300; // seconds
+
+const getSpecialtiesCached = unstable_cache(
+  async (): Promise<Specialty[]> => {
+    const sb = createPublicClient();
+    const { data, error } = await sb.from("specialties").select("*");
+    if (error) throw error; // don't cache transient failures
+    if (!data?.length) return mock.specialties;
+    return data.map(mapSpecialty);
+  },
+  ["catalog:specialties"],
+  { revalidate: CATALOG_TTL, tags: ["specialties"] }
+);
+
 export async function getSpecialties(): Promise<Specialty[]> {
   if (!isSupabaseConfigured) return mock.specialties;
   try {
-    const sb = createPublicClient();
-    const { data, error } = await sb.from("specialties").select("*");
-    if (error || !data?.length) return mock.specialties;
-    return data.map(mapSpecialty);
+    return await getSpecialtiesCached();
   } catch {
     return mock.specialties;
   }
 }
 
+const getDoctorsCached = unstable_cache(
+  async (): Promise<Doctor[]> => {
+    const sb = createPublicClient();
+    const { data, error } = await sb.from("doctors").select("*").order("rating", { ascending: false });
+    if (error) throw error;
+    if (!data?.length) return mock.doctors;
+    return data.map(mapDoctor);
+  },
+  ["catalog:doctors"],
+  { revalidate: CATALOG_TTL, tags: ["doctors"] }
+);
+
 export async function getDoctors(): Promise<Doctor[]> {
   if (!isSupabaseConfigured) return mock.doctors;
   try {
-    const sb = createPublicClient();
-    const { data, error } = await sb.from("doctors").select("*").order("rating", { ascending: false });
-    if (error || !data?.length) return mock.doctors;
-    return data.map(mapDoctor);
+    return await getDoctorsCached();
   } catch {
     return mock.doctors;
   }
@@ -382,31 +410,48 @@ export async function searchDoctors(query: DoctorQuery): Promise<DoctorPage> {
   }
 }
 
+const getDoctorCached = unstable_cache(
+  async (id: string): Promise<Doctor | null> => {
+    const sb = createPublicClient();
+    const { data, error } = await sb.from("doctors").select("*").eq("id", id).maybeSingle();
+    if (error) throw error;
+    return data ? mapDoctor(data) : null;
+  },
+  ["catalog:doctor"],
+  { revalidate: CATALOG_TTL, tags: ["doctors"] }
+);
+
 export async function getDoctor(id: string): Promise<Doctor | undefined> {
   if (!isSupabaseConfigured) return mock.getDoctor(id);
   try {
-    const sb = createPublicClient();
-    const { data, error } = await sb.from("doctors").select("*").eq("id", id).maybeSingle();
-    if (error || !data) return mock.getDoctor(id);
-    return mapDoctor(data);
+    return (await getDoctorCached(id)) ?? mock.getDoctor(id);
   } catch {
     return mock.getDoctor(id);
   }
 }
 
-export async function getReviews(doctorId?: string): Promise<Review[]> {
-  if (!isSupabaseConfigured)
-    return doctorId ? mock.reviews.filter((r) => r.doctorId === doctorId) : mock.reviews;
-  try {
+const getReviewsCached = unstable_cache(
+  async (doctorId: string): Promise<Review[] | null> => {
     const sb = createPublicClient();
     let q = sb.from("reviews").select("*");
     if (doctorId) q = q.eq("doctor_id", doctorId);
     const { data, error } = await q;
-    if (error || !data?.length)
-      return doctorId ? mock.reviews.filter((r) => r.doctorId === doctorId) : mock.reviews;
-    return data.map(mapReview);
+    if (error) throw error;
+    return data?.length ? data.map(mapReview) : null;
+  },
+  ["catalog:reviews"],
+  { revalidate: CATALOG_TTL, tags: ["reviews"] }
+);
+
+export async function getReviews(doctorId?: string): Promise<Review[]> {
+  const fallback = doctorId
+    ? mock.reviews.filter((r) => r.doctorId === doctorId)
+    : mock.reviews;
+  if (!isSupabaseConfigured) return fallback;
+  try {
+    return (await getReviewsCached(doctorId ?? "")) ?? fallback;
   } catch {
-    return doctorId ? mock.reviews.filter((r) => r.doctorId === doctorId) : mock.reviews;
+    return fallback;
   }
 }
 
