@@ -85,7 +85,7 @@ export function DashboardShell({
               const active = pathname === item.href;
               return (
                 <Link
-                  key={item.href}
+                  key={`${item.href}:${item.label}`}
                   href={item.href}
                   onClick={() => setOpen(false)}
                   className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
