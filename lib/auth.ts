@@ -1,3 +1,5 @@
+import { cache } from "react";
+import type { User } from "@supabase/supabase-js";
 import { createServerSupabase } from "./supabase/server";
 import { isSupabaseConfigured } from "./supabase/config";
 
@@ -10,18 +12,26 @@ export type SessionUser = {
   role: string;
 };
 
-/** Current signed-in user id, or undefined (mock mode / signed out). */
-export async function getUserId(): Promise<string | undefined> {
-  if (!isSupabaseConfigured) return undefined;
+/** The validated auth user for this request, memoized with React `cache()` so
+ *  the many callers within one render (layout + page + readers) share a SINGLE
+ *  `auth.getUser()` network round-trip instead of one each — the main page-load
+ *  latency win in live mode. Returns null in mock mode / when signed out. */
+export const getAuthUser = cache(async (): Promise<User | null> => {
+  if (!isSupabaseConfigured) return null;
   try {
     const sb = await createServerSupabase();
     const {
       data: { user },
     } = await sb.auth.getUser();
-    return user?.id;
+    return user ?? null;
   } catch {
-    return undefined;
+    return null;
   }
+});
+
+/** Current signed-in user id, or undefined (mock mode / signed out). */
+export async function getUserId(): Promise<string | undefined> {
+  return (await getAuthUser())?.id;
 }
 
 export type Profile = {
@@ -39,11 +49,9 @@ export type Profile = {
 export async function getMyProfile(): Promise<Profile | null> {
   if (!isSupabaseConfigured) return null;
   try {
-    const sb = await createServerSupabase();
-    const {
-      data: { user },
-    } = await sb.auth.getUser();
+    const user = await getAuthUser();
     if (!user) return null;
+    const sb = await createServerSupabase();
     const { data } = await sb
       .from("profiles")
       .select("full_name, email, phone, dob, gender, role")
@@ -67,10 +75,7 @@ export async function getMyProfile(): Promise<Profile | null> {
 export async function getSessionUser(): Promise<SessionUser | null> {
   if (!isSupabaseConfigured) return null;
   try {
-    const sb = await createServerSupabase();
-    const {
-      data: { user },
-    } = await sb.auth.getUser();
+    const user = await getAuthUser();
     if (!user) return null;
     const meta = user.user_metadata ?? {};
     return {
