@@ -4,7 +4,14 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { RealtimeChannel, SupabaseClient } from "@supabase/supabase-js";
 import { Avatar } from "@/components/ui";
 import { Icon } from "@/components/Icon";
-import { loadOlderChatMessages, markThreadRead, sendChatMessage } from "@/lib/actions/data";
+import { useToast } from "@/components/Toast";
+import {
+  loadOlderChatMessages,
+  markThreadRead,
+  sendChatAttachment,
+  sendChatMessage,
+  signChatAttachmentUrl,
+} from "@/lib/actions/data";
 import { currentPatient, getDoctor } from "@/lib/data";
 import type { ChatMessage, ChatThread } from "@/lib/data";
 
@@ -92,6 +99,8 @@ export function ChatClient({
   // Which threads currently show a "typing…" indicator for the OTHER party.
   const [typing, setTyping] = useState<Record<string, boolean>>({});
   const [loadingOlder, setLoadingOlder] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
   const channelRef = useRef<RealtimeChannel | null>(null);
   const typingTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const lastTypingSent = useRef(0);
@@ -101,6 +110,7 @@ export function ChatClient({
   // messages (instead of jumping to the bottom).
   const pendingPrepend = useRef<{ prevHeight: number } | null>(null);
 
+  const { show } = useToast();
   const ownSide: "patient" | "doctor" = perspective;
 
   // Doctor canned instructions — one tap fills the composer, ready to edit/send.
@@ -225,6 +235,9 @@ export function ChatClient({
               sender: "patient" | "doctor";
               body: string;
               created_at: string;
+              attachment_path?: string | null;
+              attachment_name?: string | null;
+              attachment_type?: string | null;
             };
             setThreads((ts) => {
               if (!ts.some((t) => t.id === row.thread_id)) return ts;
@@ -244,6 +257,8 @@ export function ChatClient({
                       time: clockLabel(row.created_at),
                       createdAt: row.created_at,
                       readAt: null,
+                      attachmentName: row.attachment_name ?? undefined,
+                      attachmentType: row.attachment_type ?? undefined,
                     },
                   ],
                   lastActive: "just now",
@@ -251,6 +266,25 @@ export function ChatClient({
                 };
               });
             });
+            // The row carries the storage path, not a URL — resolve a signed URL
+            // for the recipient and patch it in once it arrives.
+            if (row.attachment_path && row.sender !== ownSide) {
+              signChatAttachmentUrl(row.attachment_path).then((url) => {
+                if (!url) return;
+                setThreads((ts) =>
+                  ts.map((t) =>
+                    t.id !== row.thread_id
+                      ? t
+                      : {
+                          ...t,
+                          messages: t.messages.map((m) =>
+                            m.id === row.id ? { ...m, attachmentUrl: url } : m
+                          ),
+                        }
+                  )
+                );
+              });
+            }
             if (row.sender !== ownSide) {
               setTyping((t) => ({ ...t, [row.thread_id]: false }));
               // If their message landed in the thread we're viewing, it's read now.
@@ -391,6 +425,31 @@ export function ChatClient({
     }
   }
 
+  // Upload a file/image as an attachment (live mode only — needs Storage). The
+  // sender gets a signed URL back so it renders immediately; the realtime echo
+  // is deduped by id.
+  async function sendAttachment(file: File) {
+    if (!active || uploading) return;
+    if (!configured) {
+      show("Sending files needs the connected backend.", "error");
+      return;
+    }
+    setUploading(true);
+    const form = new FormData();
+    form.set("file", file);
+    form.set("threadId", active.id);
+    form.set("sender", ownSide);
+    form.set("caption", draft.trim());
+    const res = await sendChatAttachment(form);
+    setUploading(false);
+    if (res.ok && res.message) {
+      setDraft("");
+      appendMessage(active.id, res.message);
+    } else {
+      show(res.error || "Couldn't send the file", "error");
+    }
+  }
+
   return (
     <div className="card-flat flex min-h-0 flex-1 overflow-hidden">
       {/* Thread list */}
@@ -438,7 +497,9 @@ export function ChatClient({
                     <span className="shrink-0 text-[11px] text-mute">{t.lastActive}</span>
                   </div>
                   <p className="truncate text-xs text-mute">
-                    {last ? `${last.from === ownSide ? "You: " : ""}${last.text}` : o.sub}
+                    {last
+                      ? `${last.from === ownSide ? "You: " : ""}${last.text || last.attachmentName || "Attachment"}`
+                      : o.sub}
                   </p>
                 </div>
                 {t.unread > 0 && (
@@ -508,7 +569,8 @@ export function ChatClient({
                           : "rounded-bl-md bg-white text-charcoal shadow-sm"
                       }`}
                     >
-                      {m.text}
+                      {m.attachmentName && <Attachment m={m} mine={mine} />}
+                      {m.text && <p className={m.attachmentName ? "mt-2" : ""}>{m.text}</p>}
                     </div>
                     <p
                       className={`mt-1 flex items-center gap-1 text-[11px] text-mute ${
@@ -551,12 +613,36 @@ export function ChatClient({
           {/* Composer */}
           <form onSubmit={send} className="flex items-center gap-2 border-t border-[#f0f0f0] p-3">
             <input
+              ref={fileRef}
+              type="file"
+              className="hidden"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) sendAttachment(f);
+                e.target.value = ""; // allow re-selecting the same file
+              }}
+            />
+            <button
+              type="button"
+              onClick={() => fileRef.current?.click()}
+              disabled={uploading}
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-mute transition-colors hover:bg-surface-soft disabled:opacity-40"
+              aria-label="Attach a file"
+              title="Attach a file"
+            >
+              <Icon name="paperclip" size={18} />
+            </button>
+            <input
               value={draft}
               onChange={(e) => {
                 setDraft(e.target.value);
                 notifyTyping(active.id);
               }}
-              placeholder={`Message ${other(active).name.split(" ").slice(0, 2).join(" ")}…`}
+              placeholder={
+                uploading
+                  ? "Uploading…"
+                  : `Message ${other(active).name.split(" ").slice(0, 2).join(" ")}…`
+              }
               className="min-w-0 flex-1 rounded-full bg-surface-card px-4 py-3 text-sm outline-none placeholder:text-mute"
             />
             <button
@@ -575,5 +661,45 @@ export function ChatClient({
         </div>
       )}
     </div>
+  );
+}
+
+/* One message attachment: images render inline (tap to open full), other files
+   as a download chip. `attachmentUrl` may be briefly absent for a just-received
+   message while its signed URL resolves — show the name unlinked until then. */
+function Attachment({ m, mine }: { m: ChatMessage; mine: boolean }) {
+  const url = m.attachmentUrl;
+  const isImage = m.attachmentType?.startsWith("image/");
+
+  if (isImage && url) {
+    return (
+      <a href={url} target="_blank" rel="noreferrer" className="block">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={url}
+          alt={m.attachmentName ?? "Attachment"}
+          className="max-h-52 w-auto rounded-lg"
+        />
+      </a>
+    );
+  }
+
+  const chip = (
+    <span
+      className={`flex items-center gap-2 rounded-lg px-2.5 py-1.5 ${
+        mine ? "bg-white/15" : "bg-surface-soft"
+      } ${!url ? "opacity-70" : ""}`}
+    >
+      <Icon name="paperclip" size={15} />
+      <span className="max-w-[200px] truncate">{m.attachmentName ?? "Attachment"}</span>
+    </span>
+  );
+
+  return url ? (
+    <a href={url} target="_blank" rel="noreferrer" download>
+      {chip}
+    </a>
+  ) : (
+    chip
   );
 }

@@ -197,16 +197,45 @@ export { relativeTime, shortTime };
 
 export const CHAT_PAGE_SIZE = 50;
 
-function mapChatThread(t: Row, msgs: Row[], perspective: "patient" | "doctor"): ChatThread {
-  const doc = (t.doctor as Row) ?? {};
-  const messages: ChatMessage[] = msgs.map((m) => ({
+/* Map one chat_messages row → ChatMessage, resolving a signed attachment URL
+   from the supplied path→url map (private bucket, minted per read). */
+export function mapChatMessage(m: Row, signedUrls?: Map<string, string>): ChatMessage {
+  const path = m.attachment_path ? String(m.attachment_path) : "";
+  return {
     id: String(m.id),
     from: (m.sender as "patient" | "doctor") ?? "doctor",
     text: String(m.body ?? ""),
     time: shortTime(m.created_at),
     createdAt: String(m.created_at ?? ""),
     readAt: m.read_at ? String(m.read_at) : null,
-  }));
+    attachmentUrl: path ? signedUrls?.get(path) : undefined,
+    attachmentName: m.attachment_name ? String(m.attachment_name) : undefined,
+    attachmentType: m.attachment_type ? String(m.attachment_type) : undefined,
+  };
+}
+
+/* Batch-mint short-lived signed URLs for every attachment path in `rows`
+   (chat-attachments is a private bucket). Returns path → url. */
+export async function signChatAttachmentUrls(
+  sb: Awaited<ReturnType<typeof createServerSupabase>>,
+  rows: Row[]
+): Promise<Map<string, string>> {
+  const paths = rows.map((r) => r.attachment_path).filter(Boolean) as string[];
+  const signed = new Map<string, string>();
+  if (!paths.length) return signed;
+  const { data: urls } = await sb.storage.from("chat-attachments").createSignedUrls(paths, 3600);
+  for (const u of urls ?? []) if (u.path && u.signedUrl) signed.set(u.path, u.signedUrl);
+  return signed;
+}
+
+function mapChatThread(
+  t: Row,
+  msgs: Row[],
+  perspective: "patient" | "doctor",
+  signedUrls?: Map<string, string>
+): ChatThread {
+  const doc = (t.doctor as Row) ?? {};
+  const messages: ChatMessage[] = msgs.map((m) => mapChatMessage(m, signedUrls));
   // Unread = trailing run of messages from the other party.
   const otherSide = perspective === "patient" ? "doctor" : "patient";
   let unread = 0;
@@ -653,8 +682,9 @@ export async function getChatThreads(
     // The RPC returns newest-first; mapChatThread expects ascending order.
     for (const list of byThread.values())
       list.sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)));
+    const signed = await signChatAttachmentUrls(sb, (msgs as Row[]) ?? []);
     return (threads as Row[]).map((t) =>
-      mapChatThread(t, byThread.get(String(t.id)) ?? [], perspective)
+      mapChatThread(t, byThread.get(String(t.id)) ?? [], perspective, signed)
     );
   } catch {
     return fallback;

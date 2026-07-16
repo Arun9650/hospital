@@ -5,7 +5,7 @@ import { isSupabaseConfigured } from "@/lib/supabase/config";
 import { firstError, maxLen, oneOf, required } from "@/lib/validate";
 import { shortTime } from "@/lib/time";
 import { sendPushToUser } from "@/lib/push/send";
-import { searchDoctors, DOCTOR_PAGE_SIZE, getAuditLog, type DoctorQuery, type DoctorPage, type AuditPage } from "@/lib/db";
+import { searchDoctors, DOCTOR_PAGE_SIZE, getAuditLog, mapChatMessage, signChatAttachmentUrls, type DoctorQuery, type DoctorPage, type AuditPage } from "@/lib/db";
 import { logAudit } from "@/lib/audit";
 import type { ChatMessage, Prescription } from "@/lib/data";
 
@@ -345,23 +345,91 @@ export async function loadOlderChatMessages(
     const sb = await createServerSupabase();
     const { data } = await sb
       .from("chat_messages")
-      .select("id, sender, body, created_at, read_at")
+      .select("id, sender, body, created_at, read_at, attachment_path, attachment_name, attachment_type")
       .eq("thread_id", threadId)
       .lt("created_at", before)
       .order("created_at", { ascending: false })
       .limit(limit);
-    return ((data ?? []) as Array<Record<string, unknown>>)
-      .reverse()
-      .map((m) => ({
-        id: String(m.id),
-        from: (m.sender as "patient" | "doctor") ?? "doctor",
-        text: String(m.body ?? ""),
-        time: shortTime(m.created_at as string),
-        createdAt: String(m.created_at ?? ""),
-        readAt: m.read_at ? String(m.read_at) : null,
-      }));
+    const rows = ((data ?? []) as Array<Record<string, unknown>>).reverse();
+    const signed = await signChatAttachmentUrls(sb, rows);
+    return rows.map((m) => mapChatMessage(m, signed));
   } catch {
     return [];
+  }
+}
+
+/* Mint a signed URL for one chat attachment path. Used by the realtime path:
+   an incoming message carries the storage path but no URL, so the recipient
+   resolves it here (RLS scopes read to thread participants). */
+export async function signChatAttachmentUrl(path: string): Promise<string | null> {
+  if (!path || !isSupabaseConfigured) return null;
+  try {
+    const sb = await createServerSupabase();
+    const { data } = await sb.storage.from("chat-attachments").createSignedUrl(path, 3600);
+    return data?.signedUrl ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/* Send a file/image attachment in a thread. Uploads to the private
+   chat-attachments bucket (path <threadId>/…, enforced by storage RLS), then
+   inserts a chat_messages row carrying the path. Returns the row + a freshly
+   signed URL so the sender renders it immediately. Needs the backend. */
+export async function sendChatAttachment(form: FormData): Promise<{
+  ok: boolean;
+  error?: string;
+  message?: ChatMessage;
+}> {
+  const file = form.get("file");
+  const threadId = String(form.get("threadId") ?? "");
+  const sender = String(form.get("sender") ?? "");
+  const caption = String(form.get("caption") ?? "").trim();
+
+  if (!threadId) return { ok: false, error: "Missing conversation." };
+  if (firstError(oneOf(sender, ["patient", "doctor"] as const, "Sender"), maxLen(caption, 4000, "Caption")))
+    return { ok: false, error: "Invalid message." };
+  if (!(file instanceof File) || file.size === 0) return { ok: false, error: "Choose a file to send." };
+  if (file.size > 15 * 1024 * 1024) return { ok: false, error: "File is too large (max 15 MB)." };
+  if (!isSupabaseConfigured) return { ok: false, error: "Sending files needs the connected backend." };
+
+  try {
+    const sb = await createServerSupabase();
+    // First path segment MUST be the thread id — the storage insert policy checks it.
+    const safeName = file.name.replace(/[^\w.\-]+/g, "_");
+    const path = `${threadId}/${Date.now()}-${safeName}`;
+    const { error: upErr } = await sb.storage
+      .from("chat-attachments")
+      .upload(path, file, { contentType: file.type || undefined });
+    if (upErr) {
+      console.error("[chat] attachment upload failed", { message: upErr.message });
+      return { ok: false, error: "Couldn't upload the file. Please try again." };
+    }
+
+    const { data, error } = await sb
+      .from("chat_messages")
+      .insert({
+        thread_id: threadId,
+        sender: sender as "patient" | "doctor",
+        body: caption,
+        attachment_path: path,
+        attachment_name: file.name,
+        attachment_type: file.type || null,
+      })
+      .select("id, sender, body, created_at, read_at, attachment_path, attachment_name, attachment_type")
+      .single();
+    if (error || !data) {
+      console.error("[chat] attachment insert failed", { message: error?.message });
+      return { ok: false, error: "Couldn't send the file. Please try again." };
+    }
+    await sb.from("chat_threads").update({ updated_at: new Date().toISOString() }).eq("id", threadId);
+    await logAudit(sb, "chat.attachment", "chat_thread", threadId, { sender, name: file.name });
+
+    const signed = await signChatAttachmentUrls(sb, [data as Record<string, unknown>]);
+    return { ok: true, message: mapChatMessage(data as Record<string, unknown>, signed) };
+  } catch (err) {
+    console.error("[chat] attachment unexpected error", err);
+    return { ok: false, error: "Something went wrong. Please try again." };
   }
 }
 

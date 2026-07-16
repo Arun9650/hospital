@@ -16,6 +16,7 @@ export type IconName =
   | "phone"
   | "phone-off"
   | "send"
+  | "paperclip"
   | "chat"
   | "hospital"
   | "close"
@@ -42,6 +43,8 @@ const paths: Record<IconName, string> = {
   "phone-off":
     "M11 7a16 16 0 003 4M2 2l20 20M22 16.9v3a2 2 0 01-2.2 2 19.8 19.8 0 01-8.6-3 19.5 19.5 0 01-4-3.5 19.8 19.8 0 01-3-6A2 2 0 014.1 2h3a2 2 0 012 1.7c.1.9.4 1.8.7 2.7",
   send: "M22 2L11 13M22 2l-7 20-4-9-9-4z",
+  paperclip:
+    "M21.4 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.2-9.19a4 4 0 015.65 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48",
   chat: "M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z",
   hospital:
     "M4 21V5a2 2 0 012-2h12a2 2 0 012 2v16M2 21h20M12 7v6M9 10h6",

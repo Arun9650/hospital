@@ -822,6 +822,9 @@ export type ChatMessage = {
   time: string; // short label, e.g. "9:02 AM"
   createdAt?: string; // ISO timestamp, used as the pagination cursor (live mode)
   readAt?: string | null; // when the recipient read it (read receipts)
+  attachmentUrl?: string; // signed URL, minted per read (private bucket)
+  attachmentName?: string; // original file name, for display/download
+  attachmentType?: string; // mime type, to render images inline vs a file chip
 };
 
 export type ChatThread = {
