@@ -2,6 +2,7 @@ import { PatientShell } from "@/components/roleShells";
 import { PageHeader } from "@/components/DashboardShell";
 import { ChatClient } from "@/components/ChatClient";
 import { getChatThreads } from "@/lib/db";
+import { getOrCreatePatientThread } from "@/lib/actions/data";
 import { getUserId } from "@/lib/auth";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
 
@@ -11,6 +12,9 @@ export default async function PatientMessages({
   searchParams: Promise<{ doctor?: string }>;
 }) {
   const { doctor } = await searchParams;
+  // Arriving from a "Message" button (?doctor=…): make sure the thread exists
+  // before loading, so it shows up and opens instead of an empty screen.
+  if (doctor && isSupabaseConfigured) await getOrCreatePatientThread(doctor);
   const userId = await getUserId();
   const threads = await getChatThreads("patient", { userId });
 
