@@ -3,8 +3,7 @@ import { DoctorShell } from "@/components/roleShells";
 import { PageHeader } from "@/components/DashboardShell";
 import { Avatar, Badge, Button, Stat } from "@/components/ui";
 import { RealtimeRefresh } from "@/components/RealtimeRefresh";
-import { earnings } from "@/lib/data";
-import { getDoctorAppointments, getCurrentDoctor } from "@/lib/db";
+import { getDoctorAppointments, getCurrentDoctor, getDoctorEarnings } from "@/lib/db";
 import { getSessionUser } from "@/lib/auth";
 
 /** "Dr. Anaya Rao" / "Anaya Rao" → "Dr. Anaya Rao" without doubling the title. */
@@ -12,13 +11,6 @@ function withDoctorTitle(name?: string) {
   const n = (name ?? "Doctor").trim();
   return /^dr\.?\s/i.test(n) ? n : `Dr. ${n}`;
 }
-
-const todayStats = [
-  { label: "Today's appointments", value: "8", sub: "2 upcoming" },
-  { label: "Pending requests", value: "3", sub: "Action needed" },
-  { label: "Today's earnings", value: `$${earnings.today}`, sub: "+12% vs avg" },
-  { label: "Avg. rating", value: earnings.avgRating, sub: "512 reviews" },
-];
 
 /** "3:15 PM" / "9:00 AM" → minutes past midnight, so the day's consultations
  *  sort in chronological order. Unparseable labels sort last. */
@@ -38,11 +30,20 @@ export default async function DoctorDashboard() {
   // Was passing the doctor's *name* where a doctor_id is required → never matched
   // and silently fell back to mock data. Resolve the real catalog id instead.
   const appointmentRequests = doctor ? await getDoctorAppointments(doctor.id) : [];
+  const earnings = doctor ? await getDoctorEarnings(doctor.id) : null;
   // Today's schedule = the doctor's real accepted/finished consultations, in
   // time order. Pending ones are still requests → they live in "New requests".
   const schedule = appointmentRequests
     .filter((a) => a.status === "Upcoming" || a.status === "Completed")
     .sort((a, b) => minutesOfLabel(a.time) - minutesOfLabel(b.time));
+  const upcomingCount = appointmentRequests.filter((a) => a.status === "Upcoming").length;
+  const pendingCount = appointmentRequests.filter((r) => r.status === "Pending").length;
+  const todayStats = [
+    { label: "Consultations", value: String(schedule.length), sub: `${upcomingCount} upcoming` },
+    { label: "Pending requests", value: String(pendingCount), sub: pendingCount ? "Action needed" : "All clear" },
+    { label: "Earnings (mo.)", value: `$${(earnings?.month ?? 0).toLocaleString()}`, sub: `${earnings?.consultations ?? 0} completed` },
+    { label: "Avg. rating", value: doctor?.rating ?? 0, sub: `${doctor?.reviews ?? 0} reviews` },
+  ];
   return (
     <DoctorShell>
       <RealtimeRefresh tables={["appointments"]} />

@@ -1,20 +1,13 @@
 import { AdminShell } from "@/components/roleShells";
 import { PageHeader } from "@/components/DashboardShell";
 import { Button, Stat } from "@/components/ui";
-import { earnings, adminStats } from "@/lib/data";
+import { getAdminRevenue } from "@/lib/db";
 
-const bySpecialty = [
-  { name: "Cardiology", value: 96000 },
-  { name: "Mental Health", value: 78000 },
-  { name: "Dermatology", value: 64000 },
-  { name: "General Physician", value: 58000 },
-  { name: "Pediatrics", value: 49000 },
-  { name: "Gynecology", value: 41000 },
-];
-
-export default function AdminRevenue() {
-  const max = Math.max(...earnings.breakdown.map((b) => b.value));
-  const maxSpec = Math.max(...bySpecialty.map((s) => s.value));
+export default async function AdminRevenue() {
+  const revenue = await getAdminRevenue();
+  const bySpecialty = revenue.bySpecialty;
+  const max = Math.max(1, ...revenue.byDay.map((b) => b.value));
+  const maxSpec = Math.max(1, ...bySpecialty.map((s) => s.value));
   return (
     <AdminShell>
       <PageHeader
@@ -26,19 +19,19 @@ export default function AdminRevenue() {
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <div className="card-dark p-5">
           <p className="text-sm text-white/60">Revenue (MTD)</p>
-          <p className="mt-1 font-display text-3xl font-light">${(adminStats.revenue / 1000).toFixed(0)}k</p>
-          <p className="mt-2 text-xs text-[#39d98a]">▲ 8.2% MoM</p>
+          <p className="mt-1 font-display text-3xl font-light">${(revenue.mtd / 1000).toFixed(1)}k</p>
+          <p className="mt-2 text-xs text-white/50">Completed consultations</p>
         </div>
-        <div className="card-flat p-5"><Stat label="Platform commission" value="$64.3k" sub="15% avg" /></div>
-        <div className="card-flat p-5"><Stat label="Payouts to doctors" value="$364k" /></div>
-        <div className="card-flat p-5"><Stat label="Avg. order value" value="$43.60" /></div>
+        <div className="card-flat p-5"><Stat label="Platform commission" value={`$${(revenue.commission / 1000).toFixed(1)}k`} sub="15%" /></div>
+        <div className="card-flat p-5"><Stat label="Payouts to doctors" value={`$${(revenue.payouts / 1000).toFixed(1)}k`} sub="85%" /></div>
+        <div className="card-flat p-5"><Stat label="Avg. order value" value={`$${revenue.avgOrderValue.toFixed(2)}`} /></div>
       </div>
 
       <div className="mt-6 grid gap-6 lg:grid-cols-2">
         <div className="card-flat p-6">
           <h2 className="mb-6 font-display text-xl font-normal tracking-tight">Daily revenue</h2>
           <div className="flex h-52 items-end justify-between gap-3">
-            {earnings.breakdown.map((b) => (
+            {revenue.byDay.map((b) => (
               <div key={b.day} className="flex flex-1 flex-col items-center gap-2">
                 <div className="flex w-full flex-1 items-end">
                   <div className="w-full rounded-t-md bg-ps/90" style={{ height: `${(b.value / max) * 100}%` }} />
@@ -51,6 +44,9 @@ export default function AdminRevenue() {
 
         <div className="card-flat p-6">
           <h2 className="mb-6 font-display text-xl font-normal tracking-tight">Revenue by specialty</h2>
+          {bySpecialty.length === 0 && (
+            <p className="py-8 text-center text-sm text-mute">No completed consultations yet.</p>
+          )}
           <div className="space-y-4">
             {bySpecialty.map((s) => (
               <div key={s.name}>

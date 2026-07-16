@@ -1,10 +1,12 @@
 import { DoctorShell } from "@/components/roleShells";
 import { PageHeader } from "@/components/DashboardShell";
-import { Badge, Button, Stat } from "@/components/ui";
-import { earnings } from "@/lib/data";
+import { Button, Stat } from "@/components/ui";
+import { getCurrentDoctor, getDoctorEarnings } from "@/lib/db";
 
-export default function EarningsPage() {
-  const max = Math.max(...earnings.breakdown.map((b) => b.value));
+export default async function EarningsPage() {
+  const doctor = await getCurrentDoctor();
+  const earnings = await getDoctorEarnings(doctor?.id ?? "");
+  const max = Math.max(1, ...earnings.breakdown.map((b) => b.value));
   return (
     <DoctorShell>
       <PageHeader
@@ -17,11 +19,11 @@ export default function EarningsPage() {
         <div className="card-dark p-5">
           <p className="text-sm text-white/60">This month</p>
           <p className="mt-1 font-display text-3xl font-light">${earnings.month.toLocaleString()}</p>
-          <p className="mt-2 text-xs text-[#39d98a]">▲ 8.2% vs last month</p>
+          <p className="mt-2 text-xs text-white/50">Completed consultations</p>
         </div>
-        <div className="card-flat p-5"><Stat label="This week" value={`$${earnings.week.toLocaleString()}`} sub="+12% vs avg" /></div>
-        <div className="card-flat p-5"><Stat label="Pending payout" value={`$${earnings.pending}`} /></div>
-        <div className="card-flat p-5"><Stat label="Consultations" value={earnings.consultations} sub={`${earnings.avgRating}★ avg`} /></div>
+        <div className="card-flat p-5"><Stat label="This week" value={`$${earnings.week.toLocaleString()}`} /></div>
+        <div className="card-flat p-5"><Stat label="Pending (upcoming)" value={`$${earnings.pending.toLocaleString()}`} /></div>
+        <div className="card-flat p-5"><Stat label="Consultations" value={earnings.consultations} sub={`${doctor?.rating ?? 0}★ avg`} /></div>
       </div>
 
       <div className="mt-6 grid gap-6 lg:grid-cols-[1.4fr_1fr]">
@@ -51,25 +53,14 @@ export default function EarningsPage() {
           </div>
         </div>
 
-        {/* Payouts */}
+        {/* Payouts — no source until the payments integration lands (§4.4). */}
         <div className="card-flat p-6">
           <h2 className="mb-4 font-display text-xl font-normal tracking-tight">Payouts</h2>
-          <div className="divide-y divide-[#f0f0f0]">
-            {earnings.payouts.map((p) => (
-              <div key={p.id} className="flex items-center justify-between py-3">
-                <div>
-                  <p className="font-medium">${p.amount.toLocaleString()}</p>
-                  <p className="text-xs text-mute">{p.date}</p>
-                </div>
-                <Badge tone={p.status === "Paid" ? "green" : "amber"}>{p.status}</Badge>
-              </div>
-            ))}
+          <div className="rounded-lg bg-surface-card p-5 text-center text-sm text-mute">
+            <p>Payouts aren’t available yet.</p>
+            <p className="mt-1 text-xs">They’ll appear here once online payments are enabled.</p>
           </div>
-          <div className="mt-5 rounded-lg bg-surface-card p-4 text-sm">
-            <p className="text-mute">Next payout</p>
-            <p className="mt-1 font-display text-lg">$640 · Aug 1, 2026</p>
-            <Button variant="light" size="sm" full className="mt-3">Payout settings</Button>
-          </div>
+          <Button variant="light" size="sm" full className="mt-4" disabled>Payout settings</Button>
         </div>
       </div>
     </DoctorShell>

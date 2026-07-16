@@ -3,17 +3,22 @@ import { AdminShell } from "@/components/roleShells";
 import { PageHeader } from "@/components/DashboardShell";
 import { DataTable } from "@/components/DataTable";
 import { Avatar, Badge, Button, Stat } from "@/components/ui";
-import { adminStats, adminAppointments, verificationQueue, earnings } from "@/lib/data";
+import { getAdminStats, getAdminRevenue, getAdminAppointments, getVerificationQueue } from "@/lib/db";
 
-const kpis = [
-  { label: "Total patients", value: adminStats.patients.toLocaleString(), sub: "+3.1% this week" },
-  { label: "Verified doctors", value: adminStats.doctors.toLocaleString(), sub: "+18 this week" },
-  { label: "Appointments", value: adminStats.appointments.toLocaleString(), sub: "62 live now" },
-  { label: "Revenue (MTD)", value: `$${(adminStats.revenue / 1000).toFixed(0)}k`, sub: "+8.2% MoM" },
-];
-
-export default function AdminDashboard() {
-  const max = Math.max(...earnings.breakdown.map((b) => b.value));
+export default async function AdminDashboard() {
+  const [stats, revenue, appointments, queue] = await Promise.all([
+    getAdminStats(),
+    getAdminRevenue(),
+    getAdminAppointments(),
+    getVerificationQueue(),
+  ]);
+  const kpis = [
+    { label: "Total patients", value: stats.patients.toLocaleString(), sub: "Registered" },
+    { label: "Verified doctors", value: stats.doctors.toLocaleString(), sub: "On the platform" },
+    { label: "Appointments", value: stats.appointments.toLocaleString(), sub: `${stats.activeConsults} upcoming` },
+    { label: "Revenue (MTD)", value: `$${(stats.revenue / 1000).toFixed(1)}k`, sub: "Completed consults" },
+  ];
+  const max = Math.max(1, ...revenue.byDay.map((b) => b.value));
   return (
     <AdminShell>
       <PageHeader
@@ -38,7 +43,7 @@ export default function AdminDashboard() {
               <Link href="/admin/revenue" className="text-sm text-ps hover:underline">Details</Link>
             </div>
             <div className="flex h-52 items-end justify-between gap-3">
-              {earnings.breakdown.map((b) => (
+              {revenue.byDay.map((b) => (
                 <div key={b.day} className="flex flex-1 flex-col items-center gap-2">
                   <div className="flex w-full flex-1 items-end">
                     <div className="w-full rounded-t-md bg-ps/90" style={{ height: `${(b.value / max) * 100}%` }} />
@@ -53,10 +58,13 @@ export default function AdminDashboard() {
         <div className="card-flat p-6">
           <div className="mb-4 flex items-center justify-between">
             <h2 className="font-display text-xl font-normal tracking-tight">Verification queue</h2>
-            <Badge tone="amber">{adminStats.pendingVerifications}</Badge>
+            <Badge tone="amber">{stats.pendingVerifications}</Badge>
           </div>
           <div className="space-y-3">
-            {verificationQueue.slice(0, 3).map((v) => (
+            {queue.length === 0 && (
+              <p className="py-4 text-center text-sm text-mute">No pending verifications.</p>
+            )}
+            {queue.slice(0, 3).map((v) => (
               <div key={v.id} className="flex items-center gap-3">
                 <Avatar initials={v.name.replace("Dr. ", "").slice(0, 2)} color="#7a4bd1" size={38} />
                 <div className="min-w-0 flex-1">
@@ -77,7 +85,7 @@ export default function AdminDashboard() {
         </div>
         <DataTable
           columns={["Patient", "Doctor", "Schedule", "Mode", "Status", "Fee"]}
-          rows={adminAppointments.slice(0, 4).map((a) => [
+          rows={appointments.slice(0, 4).map((a) => [
             a.patient,
             a.doctor,
             a.date,

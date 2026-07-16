@@ -2,9 +2,14 @@ import { AdminShell } from "@/components/roleShells";
 import { PageHeader } from "@/components/DashboardShell";
 import { DataTable } from "@/components/DataTable";
 import { Avatar, Badge, Button, Stat, Stars } from "@/components/ui";
-import { doctors, adminStats } from "@/lib/data";
+import { getDoctors, getAdminStats } from "@/lib/db";
 
-export default function AdminDoctors() {
+export default async function AdminDoctors() {
+  const [doctors, stats] = await Promise.all([getDoctors(), getAdminStats()]);
+  const avgRating = doctors.length
+    ? (doctors.reduce((s, d) => s + d.rating, 0) / doctors.length).toFixed(1)
+    : "0";
+  const specialties = new Set(doctors.map((d) => d.specialty)).size;
   return (
     <AdminShell>
       <PageHeader
@@ -14,10 +19,10 @@ export default function AdminDoctors() {
       />
 
       <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <div className="card-flat p-5"><Stat label="Verified doctors" value={adminStats.doctors.toLocaleString()} /></div>
-        <div className="card-flat p-5"><Stat label="Pending review" value={adminStats.pendingVerifications} sub="Action needed" /></div>
-        <div className="card-flat p-5"><Stat label="Active today" value="642" /></div>
-        <div className="card-flat p-5"><Stat label="Avg. rating" value="4.8" /></div>
+        <div className="card-flat p-5"><Stat label="Total doctors" value={stats.doctors.toLocaleString()} /></div>
+        <div className="card-flat p-5"><Stat label="Pending review" value={stats.pendingVerifications} sub="Action needed" /></div>
+        <div className="card-flat p-5"><Stat label="Specialties" value={specialties} /></div>
+        <div className="card-flat p-5"><Stat label="Avg. rating" value={avgRating} /></div>
       </div>
 
       <DataTable
@@ -31,7 +36,7 @@ export default function AdminDoctors() {
           `${d.experience} yrs`,
           <span key="r" className="flex items-center gap-1"><Stars value={d.rating} /> {d.rating}</span>,
           `$${d.fee}`,
-          <Badge key="s" tone="green">Verified</Badge>,
+          <Badge key="s" tone={d.verified ? "green" : "amber"}>{d.verified ? "Verified" : "Pending"}</Badge>,
           <button key="a" className="text-ps hover:underline">Manage</button>,
         ])}
       />

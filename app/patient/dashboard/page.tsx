@@ -3,7 +3,7 @@ import { PatientShell } from "@/components/roleShells";
 import { PageHeader } from "@/components/DashboardShell";
 import { AppointmentCard } from "@/components/AppointmentCard";
 import { DoctorCard } from "@/components/DoctorCard";
-import { Button, Badge } from "@/components/ui";
+import { Button } from "@/components/ui";
 import { RealtimeRefresh } from "@/components/RealtimeRefresh";
 import {
   getPatientAppointments,
@@ -18,13 +18,6 @@ const quickActions = [
   { icon: "🔍", label: "Find a doctor", href: "/patient/doctors" },
   { icon: "💊", label: "Order medicines", href: "/patient/prescriptions" },
   { icon: "✨", label: "Ask AI assistant", href: "/patient/assistant" },
-];
-
-const vitals = [
-  { label: "Blood pressure", value: "122/80", unit: "mmHg", tone: "green" as const },
-  { label: "Heart rate", value: "72", unit: "bpm", tone: "green" as const },
-  { label: "BMI", value: "23.4", unit: "kg/m²", tone: "green" as const },
-  { label: "Glucose", value: "104", unit: "mg/dL", tone: "amber" as const },
 ];
 
 export default async function PatientDashboard() {
@@ -84,18 +77,10 @@ export default async function PatientDashboard() {
           <div>
             <div className="mb-3 flex items-center justify-between">
               <h2 className="font-display text-xl font-normal tracking-tight">Your vitals</h2>
-              <Badge tone="green">Up to date</Badge>
             </div>
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-              {vitals.map((v) => (
-                <div key={v.label} className="card-flat p-4">
-                  <p className="text-xs text-mute">{v.label}</p>
-                  <p className="mt-1 font-display text-2xl font-light">
-                    {v.value} <span className="text-xs text-mute">{v.unit}</span>
-                  </p>
-                  <span className={`mt-2 inline-block h-1.5 w-1.5 rounded-full ${v.tone === "green" ? "bg-success" : "bg-[#e0a020]"}`} />
-                </div>
-              ))}
+            <div className="card-flat p-6 text-center text-sm text-mute">
+              <p>No vitals recorded yet.</p>
+              <p className="mt-1 text-xs">Your doctor can add readings during a consultation.</p>
             </div>
           </div>
 

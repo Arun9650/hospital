@@ -1,105 +1,17 @@
-"use client";
-
-import { useState } from "react";
 import { AdminShell } from "@/components/roleShells";
 import { PageHeader } from "@/components/DashboardShell";
-import { Avatar, Badge, Button } from "@/components/ui";
-import { useToast } from "@/components/Toast";
-import { verificationQueue } from "@/lib/data";
-import { decideVerification } from "@/lib/actions/data";
+import { AdminVerificationClient } from "@/components/AdminVerificationClient";
+import { getVerificationQueue } from "@/lib/db";
 
-type Decision = "pending" | "approved" | "rejected";
-
-export default function AdminVerification() {
-  const { show } = useToast();
-  const [decisions, setDecisions] = useState<Record<string, Decision>>(
-    Object.fromEntries(verificationQueue.map((v) => [v.id, "pending"]))
-  );
-  // Which row is mid-request, so we can spin the button and block double-clicks.
-  const [busy, setBusy] = useState<Record<string, boolean>>({});
-
-  async function decide(id: string, d: Decision, name?: string) {
-    // Undo (back to pending) is local-only — the action persists decisions.
-    if (d === "pending") {
-      setDecisions((prev) => ({ ...prev, [id]: d }));
-      return;
-    }
-    if (busy[id]) return;
-    setBusy((prev) => ({ ...prev, [id]: true }));
-    const res = await decideVerification(id, d);
-    setBusy((prev) => ({ ...prev, [id]: false }));
-    if (res.ok) {
-      setDecisions((prev) => ({ ...prev, [id]: d }));
-      show(`${name ?? "Doctor"} ${d === "approved" ? "approved" : "rejected"}`, d === "approved" ? "success" : "info");
-    } else {
-      show("Couldn't save that decision. Please try again.", "error");
-    }
-  }
-
-  const pending = Object.values(decisions).filter((d) => d === "pending").length;
-
+export default async function AdminVerification() {
+  const queue = await getVerificationQueue();
   return (
     <AdminShell>
       <PageHeader
         title="Verification queue"
-        subtitle={`${pending} doctors awaiting review`}
+        subtitle={`${queue.length} doctors awaiting review`}
       />
-
-      <div className="space-y-4">
-        {verificationQueue.map((v) => {
-          const d = decisions[v.id];
-          return (
-            <div key={v.id} className="card-flat p-5">
-              <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                <div className="flex items-center gap-4">
-                  <Avatar initials={v.name.replace("Dr. ", "").slice(0, 2)} color="#7a4bd1" size={48} />
-                  <div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <p className="font-medium">{v.name}</p>
-                      <Badge tone={d === "pending" ? "amber" : d === "approved" ? "green" : "red"}>
-                        {d === "pending" ? v.status : d}
-                      </Badge>
-                    </div>
-                    <p className="text-sm text-mute">{v.specialty} · submitted {v.submitted}</p>
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      {["License", "Government ID", "Degree", "Board Reg."].slice(0, v.docs).map((doc) => (
-                        <span key={doc} className="flex items-center gap-1 rounded-full bg-surface-card px-2.5 py-1 text-xs">
-                          📄 {doc}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex shrink-0 gap-2">
-                  {d === "pending" ? (
-                    <>
-                      <Button
-                        size="sm"
-                        loading={busy[v.id]}
-                        disabled={busy[v.id]}
-                        onClick={() => decide(v.id, "approved", v.name)}
-                      >
-                        Approve
-                      </Button>
-                      <button className="btn btn-light btn-sm">Documents</button>
-                      <button
-                        className="btn btn-sm bg-[#fbe7ea] text-warning disabled:opacity-60"
-                        disabled={busy[v.id]}
-                        onClick={() => decide(v.id, "rejected", v.name)}
-                      >
-                        Reject
-                      </button>
-                    </>
-                  ) : (
-                    <button className="btn btn-ghost btn-sm" onClick={() => decide(v.id, "pending")}>Undo</button>
-                  )}
-                </div>
-              </div>
-            </div>
-          );
-        })}
-      </div>
+      <AdminVerificationClient queue={queue} />
     </AdminShell>
   );
 }

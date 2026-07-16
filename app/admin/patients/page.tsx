@@ -2,9 +2,13 @@ import { AdminShell } from "@/components/roleShells";
 import { PageHeader } from "@/components/DashboardShell";
 import { DataTable } from "@/components/DataTable";
 import { Avatar, Badge, Stat } from "@/components/ui";
-import { adminPatients, adminStats } from "@/lib/data";
+import { getAdminPatients } from "@/lib/db";
 
-export default function AdminPatients() {
+export default async function AdminPatients() {
+  const adminPatients = await getAdminPatients();
+  const active = adminPatients.filter((p) => p.status === "Active").length;
+  const totalAppts = adminPatients.reduce((s, p) => s + p.appts, 0);
+  const avgVisits = adminPatients.length ? (totalAppts / adminPatients.length).toFixed(1) : "0";
   return (
     <AdminShell>
       <PageHeader
@@ -19,10 +23,10 @@ export default function AdminPatients() {
       />
 
       <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <div className="card-flat p-5"><Stat label="Total patients" value={adminStats.patients.toLocaleString()} /></div>
-        <div className="card-flat p-5"><Stat label="Active this month" value="31,204" sub="+3.1%" /></div>
-        <div className="card-flat p-5"><Stat label="New this week" value="1,482" /></div>
-        <div className="card-flat p-5"><Stat label="Avg. visits" value="4.2" /></div>
+        <div className="card-flat p-5"><Stat label="Total patients" value={adminPatients.length.toLocaleString()} /></div>
+        <div className="card-flat p-5"><Stat label="Active (booked)" value={active.toLocaleString()} /></div>
+        <div className="card-flat p-5"><Stat label="Total appointments" value={totalAppts.toLocaleString()} /></div>
+        <div className="card-flat p-5"><Stat label="Avg. visits" value={avgVisits} /></div>
       </div>
 
       <DataTable

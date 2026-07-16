@@ -2,9 +2,13 @@ import { AdminShell } from "@/components/roleShells";
 import { PageHeader } from "@/components/DashboardShell";
 import { DataTable } from "@/components/DataTable";
 import { Badge, Stat } from "@/components/ui";
-import { adminAppointments } from "@/lib/data";
+import { getAdminAppointments } from "@/lib/db";
 
-export default function AdminAppointments() {
+export default async function AdminAppointments() {
+  const adminAppointments = await getAdminAppointments();
+  const by = (s: string) => adminAppointments.filter((a) => a.status === s).length;
+  const total = adminAppointments.length;
+  const cancelRate = total ? ((by("Cancelled") / total) * 100).toFixed(1) : "0";
   return (
     <AdminShell>
       <PageHeader
@@ -13,10 +17,10 @@ export default function AdminAppointments() {
       />
 
       <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <div className="card-flat p-5"><Stat label="Today" value="1,204" /></div>
-        <div className="card-flat p-5"><Stat label="Live now" value="62" sub="In consultation" /></div>
-        <div className="card-flat p-5"><Stat label="Completed (MTD)" value="8,410" /></div>
-        <div className="card-flat p-5"><Stat label="Cancellation rate" value="2.4%" /></div>
+        <div className="card-flat p-5"><Stat label="Total" value={total.toLocaleString()} /></div>
+        <div className="card-flat p-5"><Stat label="Upcoming" value={by("Upcoming").toLocaleString()} sub="Scheduled" /></div>
+        <div className="card-flat p-5"><Stat label="Completed" value={by("Completed").toLocaleString()} /></div>
+        <div className="card-flat p-5"><Stat label="Cancellation rate" value={`${cancelRate}%`} /></div>
       </div>
 
       <div className="mb-4 flex flex-wrap gap-2">

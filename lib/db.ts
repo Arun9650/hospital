@@ -773,19 +773,32 @@ export async function getAdminPatients() {
   if (!isSupabaseConfigured) return mock.adminPatients;
   try {
     const sb = await createServerSupabase();
-    const { data, error } = await sb.from("profiles").select("*").eq("role", "patient");
+    const [{ data, error }, { data: appts }] = await Promise.all([
+      sb.from("profiles").select("*").eq("role", "patient").order("created_at", { ascending: false }),
+      sb.from("appointments").select("patient_id"),
+    ]);
     if (error || !data?.length) return mock.adminPatients;
-    return data.map((r: Row) => ({
-      id: String(r.id),
-      name: String(r.full_name || "Patient"),
-      email: String(r.email ?? ""),
-      joined: new Date(String(r.created_at ?? Date.now())).toLocaleDateString("en-US", {
-        month: "short",
-        year: "numeric",
-      }),
-      appts: 0,
-      status: "Active",
-    }));
+    // Real appointment count per patient → drives the "Appointments" column and
+    // an Active/Inactive status (has ever booked vs not).
+    const counts = new Map<string, number>();
+    for (const a of appts ?? []) {
+      const k = String(a.patient_id ?? "");
+      if (k) counts.set(k, (counts.get(k) ?? 0) + 1);
+    }
+    return data.map((r: Row) => {
+      const n = counts.get(String(r.id)) ?? 0;
+      return {
+        id: String(r.id),
+        name: String(r.full_name || "Patient"),
+        email: String(r.email ?? ""),
+        joined: new Date(String(r.created_at ?? Date.now())).toLocaleDateString("en-US", {
+          month: "short",
+          year: "numeric",
+        }),
+        appts: n,
+        status: n > 0 ? "Active" : "Inactive",
+      };
+    });
   } catch {
     return mock.adminPatients;
   }
@@ -799,7 +812,7 @@ export async function getAdminAppointments() {
       .from("appointments")
       .select("*")
       .order("created_at", { ascending: false })
-      .limit(20);
+      .limit(200);
     if (error || !data?.length) return mock.adminAppointments;
     return data.map((r: Row) => ({
       id: String(r.id).slice(0, 8),
@@ -864,20 +877,154 @@ export async function getAdminStats() {
   try {
     const sb = await createServerSupabase();
     const head = { count: "exact" as const, head: true };
-    const [patients, doctors, appts, pending] = await Promise.all([
+    const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString();
+    const [patients, doctors, appts, pending, active, mtdFees] = await Promise.all([
       sb.from("profiles").select("*", head).eq("role", "patient"),
       sb.from("doctors").select("*", head),
       sb.from("appointments").select("*", head),
-      sb.from("verification_queue").select("*", head).eq("status", "Pending"),
+      // Pending = anything not yet decided (covers seeded "Pending"/"In review").
+      sb.from("verification_queue").select("*", head).not("status", "in", '("approved","rejected")'),
+      sb.from("appointments").select("*", head).eq("status", "Upcoming"),
+      // Revenue (MTD): completed-consultation fees booked this calendar month.
+      // date_label is free text, so created_at is the only real timestamp.
+      sb.from("appointments").select("fee").eq("status", "Completed").gte("created_at", monthStart),
     ]);
+    const revenue = (mtdFees.data ?? []).reduce((s, r) => s + Number((r as Row).fee ?? 0), 0);
     return {
-      ...mock.adminStats,
-      patients: patients.count ?? mock.adminStats.patients,
-      doctors: doctors.count ?? mock.adminStats.doctors,
-      appointments: appts.count ?? mock.adminStats.appointments,
-      pendingVerifications: pending.count ?? mock.adminStats.pendingVerifications,
+      patients: patients.count ?? 0,
+      doctors: doctors.count ?? 0,
+      appointments: appts.count ?? 0,
+      revenue,
+      pendingVerifications: pending.count ?? 0,
+      activeConsults: active.count ?? 0,
     };
   } catch {
     return mock.adminStats;
+  }
+}
+
+/* Real marketplace revenue for the admin revenue page, aggregated in JS from
+   completed appointments (PostgREST has no cheap SUM without an RPC).
+   ponytail: fetches all completed fee rows — fine at demo scale; move the sum
+   and group-by into a Postgres RPC/view if the appointments table grows large. */
+export type AdminRevenue = {
+  mtd: number;
+  commission: number;
+  payouts: number;
+  avgOrderValue: number;
+  byDay: { day: string; value: number }[];
+  bySpecialty: { name: string; value: number }[];
+};
+
+// Sum an amount field into the last 7 calendar days, labelled by weekday.
+function amountByRecentDay(rows: Row[], amountKey: string): { day: string; value: number }[] {
+  const names = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const buckets = Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(today);
+    d.setDate(d.getDate() - (6 - i));
+    const start = d.getTime();
+    return { day: names[d.getDay()], value: 0, start, end: start + 86400000 };
+  });
+  for (const r of rows) {
+    const t = new Date(String(r.created_at)).getTime();
+    const b = buckets.find((b) => t >= b.start && t < b.end);
+    if (b) b.value += Number(r[amountKey] ?? 0);
+  }
+  return buckets.map(({ day, value }) => ({ day, value }));
+}
+
+export async function getAdminRevenue(): Promise<AdminRevenue> {
+  const demo = (): AdminRevenue => ({
+    mtd: mock.adminStats.revenue,
+    commission: Math.round(mock.adminStats.revenue * 0.15),
+    payouts: Math.round(mock.adminStats.revenue * 0.85),
+    avgOrderValue: 43.6,
+    byDay: mock.earnings.breakdown,
+    bySpecialty: [],
+  });
+  if (!isSupabaseConfigured) return demo();
+  try {
+    const sb = await createServerSupabase();
+    const { data, error } = await sb
+      .from("appointments")
+      .select("fee, specialty, created_at")
+      .eq("status", "Completed");
+    if (error) return demo();
+    const rows = (data ?? []) as Row[];
+    const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1).getTime();
+    const mtdRows = rows.filter((r) => new Date(String(r.created_at)).getTime() >= monthStart);
+    const mtd = mtdRows.reduce((s, r) => s + Number(r.fee ?? 0), 0);
+    const total = rows.reduce((s, r) => s + Number(r.fee ?? 0), 0);
+    const bySpec = new Map<string, number>();
+    for (const r of rows) {
+      const k = String(r.specialty || "Other");
+      bySpec.set(k, (bySpec.get(k) ?? 0) + Number(r.fee ?? 0));
+    }
+    return {
+      mtd,
+      commission: Math.round(mtd * 0.15),
+      payouts: Math.round(mtd * 0.85),
+      avgOrderValue: rows.length ? Math.round((total / rows.length) * 100) / 100 : 0,
+      byDay: amountByRecentDay(rows, "fee"),
+      bySpecialty: [...bySpec.entries()]
+        .map(([name, value]) => ({ name, value }))
+        .sort((a, b) => b.value - a.value)
+        .slice(0, 6),
+    };
+  } catch {
+    return demo();
+  }
+}
+
+/* Real doctor earnings, aggregated from that doctor's appointments. Time buckets
+   use created_at (date_label is free text). Payouts have no source until the
+   payments integration lands, so the earnings page shows an empty payouts state
+   in live mode rather than fabricated rows. */
+export type DoctorEarnings = {
+  today: number;
+  week: number;
+  month: number;
+  pending: number;
+  consultations: number;
+  breakdown: { day: string; value: number }[];
+};
+
+export async function getDoctorEarnings(doctorId: string): Promise<DoctorEarnings> {
+  const demo = (): DoctorEarnings => ({
+    today: mock.earnings.today,
+    week: mock.earnings.week,
+    month: mock.earnings.month,
+    pending: mock.earnings.pending,
+    consultations: mock.earnings.consultations,
+    breakdown: mock.earnings.breakdown,
+  });
+  if (!isSupabaseConfigured || !doctorId) return demo();
+  try {
+    const sb = await createServerSupabase();
+    const { data, error } = await sb
+      .from("appointments")
+      .select("fee, status, created_at")
+      .eq("doctor_id", doctorId);
+    if (error) return demo();
+    const rows = (data ?? []) as Row[];
+    const completed = rows.filter((r) => r.status === "Completed");
+    const now = Date.now();
+    const day = 86400000;
+    const sumSince = (ms: number) =>
+      completed
+        .filter((r) => now - new Date(String(r.created_at)).getTime() < ms)
+        .reduce((s, r) => s + Number(r.fee ?? 0), 0);
+    return {
+      today: sumSince(day),
+      week: sumSince(7 * day),
+      month: sumSince(30 * day),
+      pending: rows.filter((r) => r.status === "Upcoming").reduce((s, r) => s + Number(r.fee ?? 0), 0),
+      consultations: completed.length,
+      breakdown: amountByRecentDay(completed, "fee"),
+    };
+  } catch {
+    return demo();
   }
 }
