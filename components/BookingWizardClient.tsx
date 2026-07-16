@@ -7,7 +7,7 @@ import { useToast } from "@/components/Toast";
 import { uploadMedicalRecord } from "@/lib/actions/records";
 import type { Doctor } from "@/lib/data";
 import { buildBookingDays, type BookingDay } from "@/lib/booking";
-import { createAppointment } from "@/lib/actions/data";
+import { createAppointment, lockSlot } from "@/lib/actions/data";
 import { appointmentIcs } from "@/lib/ics";
 
 const steps = ["Consultation", "Date & time", "Details", "Payment"];
@@ -37,6 +37,7 @@ export function BookingWizardClient({ doctor, days }: { doctor: Doctor; days?: B
   const [feeAck, setFeeAck] = useState(false);
   const [done, setDone] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [locking, setLocking] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [apptId, setApptId] = useState<string | undefined>();
   // Pre-consultation document uploads → land in the patient's medical records.
@@ -67,6 +68,24 @@ export function BookingWizardClient({ doctor, days }: { doctor: Doctor; days?: B
     step === 2 ||
     step === 3;
 
+  // Advancing past the date/time step soft-locks the chosen slot for 5 minutes
+  // so the patient doesn't fill out the rest only to lose the slot at payment.
+  async function handleContinue() {
+    if (!canNext) return;
+    if (step === 1) {
+      setLocking(true);
+      const date = `${bookingDays[day].label}, ${bookingDays[day].date}`;
+      const res = await lockSlot({ doctorId: doctor.id, date, time: slot });
+      setLocking(false);
+      if (!res.locked) {
+        showToast("That time was just taken. Please pick another slot.", "error");
+        setSlot("");
+        return;
+      }
+    }
+    setStep((s) => s + 1);
+  }
+
   async function handleConfirm() {
     setSaving(true);
     setError(null);
@@ -86,6 +105,11 @@ export function BookingWizardClient({ doctor, days }: { doctor: Doctor; days?: B
     // failed booking must NOT report success (and never created a notification).
     if (!res.ok) {
       setError(res.error || "We couldn't complete your booking. Please try again.");
+      // Slot was taken while checking out (soft-lock expired) → back to picking.
+      if (res.error?.includes("another slot")) {
+        setSlot("");
+        setStep(1);
+      }
       return;
     }
     setApptId(res.id);
@@ -297,7 +321,7 @@ export function BookingWizardClient({ doctor, days }: { doctor: Doctor; days?: B
               Back
             </Button>
             {step < 3 ? (
-              <Button onClick={() => canNext && setStep((s) => s + 1)} disabled={!canNext}>
+              <Button onClick={handleContinue} loading={locking} disabled={!canNext || locking}>
                 Continue
               </Button>
             ) : (

@@ -184,6 +184,15 @@ export async function createAppointment(input: {
       p_reason: input.reason,
     });
     if (error) {
+      // Race-safe slot guarantee (0020): a unique-violation means another
+      // patient booked this exact slot first. Surface it as a clear, actionable
+      // message so the wizard can send the user back to pick another time.
+      if (error.code === "23505") {
+        return {
+          ok: false,
+          error: "That time was just booked by someone else. Please choose another slot.",
+        };
+      }
       // Surface the real Postgres/PostgREST cause so booking failures are
       // diagnosable from the server log. The most common one is PGRST202
       // "Could not find function public.book_appointment" → migration 0007 isn't
@@ -235,6 +244,35 @@ export async function createAppointment(input: {
   } catch (err) {
     console.error("[booking] unexpected error", err);
     return { ok: false, error: "Something went wrong while booking. Please try again." };
+  }
+}
+
+/* Acquire a 5-minute soft-lock on a slot while the patient completes booking
+   (PRD 6.4.1). Returns { ok, locked }: locked=false means someone else is
+   holding or already booked it. No-op success in mock mode. The unique index
+   (0020) is the real guarantee; this just prevents wasted form-filling. */
+export async function lockSlot(input: {
+  doctorId: string;
+  date: string;
+  time: string;
+}): Promise<{ ok: boolean; locked: boolean }> {
+  if (!input.doctorId || !input.date || !input.time) return { ok: false, locked: false };
+  if (!isSupabaseConfigured) return { ok: true, locked: true };
+  try {
+    const sb = await createServerSupabase();
+    const { data, error } = await sb.rpc("lock_slot", {
+      p_doctor_id: input.doctorId,
+      p_date_label: input.date,
+      p_time_label: input.time,
+    });
+    // Fail-OPEN on error (e.g. RPC not deployed yet): the soft-lock is only a
+    // UX nicety — the unique index (0020) still prevents real double-booking at
+    // confirm time — so a lock outage must never block booking. Only a genuine
+    // `false` (someone else holds it / already booked) blocks.
+    if (error) return { ok: true, locked: true };
+    return { ok: true, locked: data === true };
+  } catch {
+    return { ok: true, locked: true };
   }
 }
 
