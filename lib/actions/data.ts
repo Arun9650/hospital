@@ -7,6 +7,7 @@ import { shortTime } from "@/lib/time";
 import { sendPushToUser } from "@/lib/push/send";
 import { searchDoctors, DOCTOR_PAGE_SIZE, getAuditLog, mapChatMessage, signChatAttachmentUrls, type DoctorQuery, type DoctorPage, type AuditPage } from "@/lib/db";
 import { logAudit } from "@/lib/audit";
+import { allowAction } from "@/lib/rateLimit";
 import type { ChatMessage, Prescription } from "@/lib/data";
 
 type Result = { ok: boolean };
@@ -132,6 +133,11 @@ export async function createAppointment(input: {
     const reasonErr = maxLen(input.reason, 1000, "Reason");
     if (reasonErr) return { ok: false, error: reasonErr };
 
+    // Rate limit: cap bursts of bookings from one account (§4.1.1).
+    if (!(await allowAction(sb, "book", 10, 3600))) {
+      return { ok: false, error: "You're booking too frequently. Please try again in a little while." };
+    }
+
     // Idempotency / duplicate-click guard: reuse an existing pending or upcoming
     // booking for the same patient/doctor/slot rather than creating a second one
     // (which would also fire a duplicate notification).
@@ -247,6 +253,8 @@ export async function sendChatMessage(input: {
   if (!isSupabaseConfigured) return { ok: true };
   try {
     const sb = await createServerSupabase();
+    // Rate limit: cap message spam per account.
+    if (!(await allowAction(sb, "chat", 30, 60))) return { ok: false };
     const { data, error } = await sb
       .from("chat_messages")
       .insert({ thread_id: input.threadId, sender: input.sender, body })
@@ -395,6 +403,10 @@ export async function sendChatAttachment(form: FormData): Promise<{
 
   try {
     const sb = await createServerSupabase();
+    // Rate limit: cap attachment uploads per account (heavier than text).
+    if (!(await allowAction(sb, "chat_attachment", 20, 3600))) {
+      return { ok: false, error: "You're sending files too quickly. Please try again shortly." };
+    }
     // First path segment MUST be the thread id — the storage insert policy checks it.
     const safeName = file.name.replace(/[^\w.\-]+/g, "_");
     const path = `${threadId}/${Date.now()}-${safeName}`;
