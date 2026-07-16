@@ -379,11 +379,14 @@ function filterDoctorsInMemory(all: Doctor[], query: DoctorQuery): DoctorPage {
  * result — and we only fall back to the mock catalog on a hard query error, so
  * the demo still works if the doctors table is unreachable.
  */
-export async function searchDoctors(query: DoctorQuery): Promise<DoctorPage> {
-  if (!isSupabaseConfigured) return filterDoctorsInMemory(mock.doctors, query);
-  const offset = query.offset ?? 0;
-  const limit = query.limit ?? DOCTOR_PAGE_SIZE;
-  try {
+// Cached per distinct query (unstable_cache keys on the args): the hot cases —
+// page 1 with no filter, per-specialty browse, pagination — become cache hits;
+// unique text searches simply miss and re-query. Throws on hard error so only
+// real result sets are cached; the outer searchDoctors falls back to mock.
+const searchDoctorsCached = unstable_cache(
+  async (query: DoctorQuery): Promise<DoctorPage> => {
+    const offset = query.offset ?? 0;
+    const limit = query.limit ?? DOCTOR_PAGE_SIZE;
     const sb = createPublicClient();
     let sel = sb.from("doctors").select("*", { count: "exact" });
 
@@ -403,8 +406,17 @@ export async function searchDoctors(query: DoctorQuery): Promise<DoctorPage> {
     else sel = sel.order("rating", { ascending: false });
 
     const { data, error, count } = await sel.range(offset, offset + limit - 1);
-    if (error) return filterDoctorsInMemory(mock.doctors, query);
+    if (error) throw error;
     return { doctors: (data ?? []).map(mapDoctor), total: count ?? 0 };
+  },
+  ["catalog:search-doctors"],
+  { revalidate: CATALOG_TTL, tags: ["doctors"] }
+);
+
+export async function searchDoctors(query: DoctorQuery): Promise<DoctorPage> {
+  if (!isSupabaseConfigured) return filterDoctorsInMemory(mock.doctors, query);
+  try {
+    return await searchDoctorsCached(query);
   } catch {
     return filterDoctorsInMemory(mock.doctors, query);
   }
