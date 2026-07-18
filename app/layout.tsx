@@ -62,6 +62,7 @@ export default async function RootLayout({
         <SessionProvider user={user}>
           <ToastProvider>{children}
                <SpeedInsights />
+               
           </ToastProvider>
         </SessionProvider>
         <ServiceWorkerRegister />

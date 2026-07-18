@@ -47,11 +47,11 @@ export function LandingHero() {
           </motion.p>
 
           <motion.div variants={fadeUp} className="mt-9 flex flex-wrap gap-3">
-            <Link href="/patient/doctors" className="btn btn-primary">
-              Book a consult <ArrowRight size={18} />
+            <Link href="/patient/instant" className="btn btn-primary">
+              Consult now <ArrowRight size={18} />
             </Link>
-            <Link href="#how" className="btn btn-dark">
-              See how it works
+            <Link href="/patient/doctors" className="btn btn-dark">
+              Book a consult
             </Link>
           </motion.div>
 

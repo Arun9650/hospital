@@ -247,6 +247,56 @@ export async function createAppointment(input: {
   }
 }
 
+/* Consult Now → match the patient to the next available doctor and open a room.
+   "Next available" = the top-rated catalog doctor offering the chosen mode (and
+   specialty, when picked). Reuses createAppointment so the booking, doctor
+   notification, and audit log are identical to a normal booking — this is just
+   an instant slot ("Today", now). Returns a room id to redirect into.
+   ponytail: real presence/queueing would gate on a live online flag; rating-sort
+   over the catalog is a fine stand-in — swap in a presence check if doctors go
+   truly online/offline. */
+export async function instantMatch(input: {
+  mode: "Video" | "Audio" | "Chat";
+  specialty?: string;
+}): Promise<{ ok: boolean; roomId?: string; doctorName?: string; error?: string }> {
+  if (!["Video", "Audio", "Chat"].includes(input.mode)) {
+    return { ok: false, error: "Pick a consultation mode." };
+  }
+
+  const { doctors } = await searchDoctors({
+    modes: [input.mode],
+    specialties: input.specialty ? [input.specialty] : undefined,
+    sort: "rating",
+    limit: 1,
+  });
+  const doc = doctors[0];
+  if (!doc) {
+    return {
+      ok: false,
+      error: "No doctor is available for that choice right now. Try another mode or specialty.",
+    };
+  }
+
+  const res = await createAppointment({
+    id: doc.id,
+    doctorId: doc.id,
+    doctorName: doc.name,
+    specialty: doc.specialty,
+    mode: input.mode,
+    date: "Today",
+    time: shortTime(new Date().toISOString()),
+    fee: doc.fee,
+    reason: "Instant consultation",
+  });
+  if (!res.ok) {
+    return { ok: false, error: res.error || "Couldn't start your consultation. Please try again." };
+  }
+
+  // Mock mode returns no appointment id — synthesize a room keyed to the doctor
+  // so the demo still opens a consultation room.
+  return { ok: true, roomId: res.id ?? `instant-${doc.id}`, doctorName: doc.name };
+}
+
 /* Acquire a 5-minute soft-lock on a slot while the patient completes booking
    (PRD 6.4.1). Returns { ok, locked }: locked=false means someone else is
    holding or already booked it. No-op success in mock mode. The unique index

@@ -39,8 +39,8 @@ export default async function PatientDashboard() {
         subtitle="Here's a calm overview of your health today."
         action={
           <div className="flex flex-wrap gap-2">
-            <Button href="/patient/doctors">Book appointment</Button>
-            <Button href="/patient/appointments" variant="light">My appointments</Button>
+            <Button href="/patient/instant">Consult now</Button>
+            <Button href="/patient/doctors" variant="light">Book appointment</Button>
           </div>
         }
       />
