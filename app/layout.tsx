@@ -5,6 +5,7 @@ import { ServiceWorkerRegister } from "@/components/ServiceWorkerRegister";
 import { SessionProvider } from "@/components/SessionProvider";
 import { ToastProvider } from "@/components/Toast";
 import { getSessionUser } from "@/lib/auth";
+import { SpeedInsights } from "@vercel/speed-insights/next"
 
 const display = Fraunces({
   variable: "--font-display",
@@ -59,7 +60,9 @@ export default async function RootLayout({
     >
       <body className="min-h-full">
         <SessionProvider user={user}>
-          <ToastProvider>{children}</ToastProvider>
+          <ToastProvider>{children}
+               <SpeedInsights />
+          </ToastProvider>
         </SessionProvider>
         <ServiceWorkerRegister />
       </body>
