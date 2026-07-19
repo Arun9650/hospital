@@ -10,6 +10,8 @@ export type SessionUser = {
   initials: string;
   color: string;
   role: string;
+  /** Subscription tier — "plus" for Aria Plus members, else "free". */
+  plan: string;
 };
 
 /** The validated auth user for this request, memoized with React `cache()` so
@@ -85,6 +87,7 @@ export async function getSessionUser(): Promise<SessionUser | null> {
       initials: (meta.initials as string) || (user.email ?? "AH").slice(0, 2).toUpperCase(),
       color: (meta.avatar_color as string) || "#0070d1",
       role: (meta.role as string) || "patient",
+      plan: (meta.plan as string) || "free",
     };
   } catch {
     return null;

@@ -62,6 +62,30 @@ export async function updateProfile(input: {
   }
 }
 
+/** Subscribe to / cancel Aria Plus. Membership lives in auth metadata
+ *  (`user_metadata.plan`) — same no-migration approach as `role` — so
+ *  getSessionUser picks it up app-wide. No-ops in mock mode.
+ *  ponytail: no real payment — booking is already mock-pay in this app; wire a
+ *  processor here (and a `current_period_end`) when payments go live. */
+export async function setPlan(plan: "plus" | "free"): Promise<Result> {
+  if (plan !== "plus" && plan !== "free") return { ok: false, error: "Invalid plan." };
+  if (!isSupabaseConfigured) return { ok: true };
+  try {
+    const sb = await createServerSupabase();
+    const {
+      data: { user },
+    } = await sb.auth.getUser();
+    if (!user) return { ok: false, error: "You're not signed in." };
+    const { error } = await sb.auth.updateUser({ data: { plan } });
+    if (error) return { ok: false, error: error.message };
+    await logAudit(sb, plan === "plus" ? "plan.subscribe" : "plan.cancel", "profile", user.id, { plan });
+    revalidatePath("/", "layout");
+    return { ok: true };
+  } catch {
+    return { ok: false, error: "Couldn't update your plan. Please try again." };
+  }
+}
+
 /** Change the signed-in user's password. No-ops in mock mode. */
 export async function changePassword(newPassword: string): Promise<Result> {
   if (newPassword.length < 8) return { ok: false, error: "Password must be at least 8 characters." };

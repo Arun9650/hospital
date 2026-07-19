@@ -35,6 +35,7 @@ export const patientNav: NavItem[] = [
   { href: "/patient/appointments", label: "Appointments", icon: <I d={icons.calendar} /> },
   { href: "/patient/records", label: "Medical Records", icon: <I d={icons.file} /> },
   { href: "/patient/prescriptions", label: "Prescriptions", icon: <I d={icons.rx} /> },
+  { href: "/patient/plan", label: "Aria Plus", icon: <I d={icons.spark} /> },
   { href: "/patient/messages", label: "Messages", icon: <I d={icons.chat} /> },
   { href: "/patient/assistant", label: "AI Assistant", icon: <I d={icons.spark} /> },
   { href: "/patient/notifications", label: "Notifications", icon: <I d={icons.bell} /> },
