@@ -30,7 +30,10 @@ Deno.serve(async (req) => {
   const payload = await req.json().catch(() => null);
   const row: NotificationRow | undefined = payload?.record;
   // Global demo rows (user_id null) target no specific device — skip.
-  if (!row?.user_id) return new Response("no target", { status: 200 });
+  if (!row?.user_id) {
+    console.log("📭 push-fanout: no target user (global row), skipping", { id: row?.id });
+    return new Response("no target", { status: 200 });
+  }
 
   // Expo rows only: web rows have p256dh/auth set and are sent via web-push.
   const { data: tokens } = await supabase
@@ -38,7 +41,11 @@ Deno.serve(async (req) => {
     .select("endpoint")
     .eq("user_id", row.user_id)
     .is("p256dh", null);
-  if (!tokens?.length) return new Response("no devices", { status: 200 });
+  if (!tokens?.length) {
+    console.log("📭 push-fanout: no Expo devices for user", row.user_id);
+    return new Response("no devices", { status: 200 });
+  }
+  console.log(`📨 push-fanout: sending "${row.title}" to ${tokens.length} device(s) of user ${row.user_id}`);
 
   // No PHI in the payload — title/body are already generic; details live behind
   // auth. `data.kind` lets the app deep-link to the right screen on tap.
@@ -66,6 +73,15 @@ Deno.serve(async (req) => {
     });
     const json = await res.json().catch(() => null);
     const tickets: Array<{ status?: string; details?: { error?: string } }> = json?.data ?? [];
+    const okCount = tickets.filter((t) => t?.status === "ok").length;
+    const failed = tickets
+      .map((t, k) => ({ to: chunk[k]?.to, error: t?.details?.error }))
+      .filter((_, k) => tickets[k]?.status === "error");
+    if (!res.ok || failed.length) {
+      console.log(`⚠️ push-fanout: ${okCount} sent, ${failed.length} failed (http ${res.status})`, failed);
+    } else {
+      console.log(`✅ push-fanout: ${okCount} notification(s) accepted by Expo`);
+    }
     // Prune tokens Expo reports as retired so we stop pushing to dead devices.
     await Promise.all(
       tickets.map((tk, j) =>
