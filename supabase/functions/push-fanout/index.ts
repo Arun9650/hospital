@@ -72,15 +72,17 @@ Deno.serve(async (req) => {
       body: JSON.stringify(chunk),
     });
     const json = await res.json().catch(() => null);
-    const tickets: Array<{ status?: string; details?: { error?: string } }> = json?.data ?? [];
-    const okCount = tickets.filter((t) => t?.status === "ok").length;
+    const tickets: Array<{ status?: string; id?: string; details?: { error?: string } }> = json?.data ?? [];
+    const okIds = tickets.filter((t) => t?.status === "ok").map((t) => t.id);
     const failed = tickets
       .map((t, k) => ({ to: chunk[k]?.to, error: t?.details?.error }))
       .filter((_, k) => tickets[k]?.status === "error");
     if (!res.ok || failed.length) {
-      console.log(`⚠️ push-fanout: ${okCount} sent, ${failed.length} failed (http ${res.status})`, failed);
+      console.log(`⚠️ push-fanout: ${okIds.length} sent, ${failed.length} failed (http ${res.status})`, failed);
     } else {
-      console.log(`✅ push-fanout: ${okCount} notification(s) accepted by Expo`);
+      // Ticket "ok" only means Expo queued it. Query the receipt to see whether
+      // FCM/APNs actually delivered: POST these ids to /--/api/v2/push/getReceipts.
+      console.log(`✅ push-fanout: ${okIds.length} accepted by Expo — receipt ids:`, okIds);
     }
     // Prune tokens Expo reports as retired so we stop pushing to dead devices.
     await Promise.all(
