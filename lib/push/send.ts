@@ -38,7 +38,8 @@ export async function sendPushToUser(userId: string, payload: PushPayload): Prom
     const { data: subs } = await sb
       .from("push_subscriptions")
       .select("endpoint, p256dh, auth")
-      .eq("user_id", userId);
+      .eq("user_id", userId)
+      .not("p256dh", "is", null); // web rows only; Expo tokens (null keys) go via push-fanout
     if (!subs?.length) return;
 
     const body = JSON.stringify(payload);
