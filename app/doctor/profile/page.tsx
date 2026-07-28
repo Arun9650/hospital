@@ -1,9 +1,11 @@
 import { DoctorShell } from "@/components/roleShells";
 import { PageHeader } from "@/components/DashboardShell";
-import { ProfileForm } from "@/components/ProfileForm";
+import { DoctorProfileForm } from "@/components/DoctorProfileForm";
 import { getMyProfile, type Profile } from "@/lib/auth";
+import { getCurrentDoctor } from "@/lib/db";
+import { doctors as mockDoctors } from "@/lib/data";
 
-const demo: Profile = {
+const demoProfile: Profile = {
   full_name: "Dr. Anaya Rao",
   email: "anaya.rao@example.com",
   phone: "",
@@ -13,11 +15,14 @@ const demo: Profile = {
 };
 
 export default async function DoctorProfile() {
-  const profile = (await getMyProfile()) ?? demo;
+  const [profile, doctor] = await Promise.all([getMyProfile(), getCurrentDoctor()]);
   return (
     <DoctorShell>
-      <PageHeader title="Profile" subtitle="Manage your personal information." />
-      <ProfileForm initial={profile} />
+      <PageHeader title="Profile" subtitle="Manage your personal and professional details." />
+      <DoctorProfileForm
+        profile={profile ?? demoProfile}
+        doctor={doctor ?? mockDoctors.find((d) => d.id === "dr-anaya-rao")!}
+      />
     </DoctorShell>
   );
 }
